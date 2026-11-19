@@ -4,6 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -25,7 +26,25 @@ jobs:
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
+        id: upload
         with:
           path: dist
+      - name: Wait for Pages artifact
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
+        run: |
+          for delay in 0 1 2 4 8 16 32; do
+            sleep "$delay"
+            if artifact_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" \
+              --jq 'select(.name == "github-pages" and .expired == false) | .id' 2>/dev/null) &&
+              [ "$artifact_id" = "$ARTIFACT_ID" ] && [ -n "$artifact_id" ]; then
+              echo "Pages artifact $artifact_id is available."
+              exit 0
+            fi
+          done
+          echo "::error::Pages artifact $ARTIFACT_ID was not visible after upload."
+          exit 1
       - id: release
         uses: actions/deploy-pages@v4
