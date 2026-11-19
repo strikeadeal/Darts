@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta name="theme-color" content="#101110" />
+    <meta name="theme-color" content="#0b0c0a" />
     <meta
       name="description"
       content="Nine darts. Three rounds. An offline darts arcade for solo runs and local duels."
@@ -32,29 +32,40 @@
     <title>Dartshift · Nine Dart Rush</title>
   </head>
   <body>
-    <div class="frame">
-      <header>
-        <button id="brand" aria-label="Dartshift home">
-          <svg viewBox="0 0 38 28" aria-hidden="true">
-            <path d="M1 7 38 3l-3 7H10zm9 6h24l-3 6H18zm10 9h10l-3 5z" /></svg
-          ><span>DARTSHIFT</span>
-        </button>
-        <nav aria-label="Game controls">
-          <button id="help"></button><button id="audio"></button>
-        </nav>
-      </header>
-      <main id="main"></main>
-      <footer>
-        <span id="record"></span
-        ><span class="footer-flights" aria-hidden="true">///</span>
-      </footer>
-      <aside id="update" hidden>
-        <span>New version ready.</span><button id="apply">Update game</button>
-      </aside>
-      <p id="storage-note" hidden>
-        Storage is unavailable. This session can still be played.
-      </p>
-    </div>
+    <nav class="hud" aria-label="Game controls">
+      <button id="back" class="glass" aria-label="Save and return home" hidden></button>
+      <span class="hud-right"><button id="help" class="glass"></button><button id="audio" class="glass"></button></span>
+    </nav>
+    <main id="main">
+      <!-- One room for every screen. Each .cam layer gets the same camera
+           transform; the play shot is the identity, so the throw reads an
+           untransformed board. -->
+      <div id="scene" class="scene" data-shot="intro">
+        <div class="cam wallfx" aria-hidden="true">
+          <div class="panels"></div>
+          <div class="lamp"></div>
+          <div class="flare"></div>
+          <div class="surround"></div>
+          <div class="skirting"></div>
+          <div class="neon">
+            <svg viewBox="0 0 38 28"><path d="M1 7 38 3l-3 7H10zm9 6h24l-3 6H18zm10 9h10l-3 5z" /></svg>
+            <span>NINE DART</span><b>RUSH</b>
+          </div>
+        </div>
+        <div class="cam floorfx" aria-hidden="true">
+          <div class="floor"><i class="mat"></i><i class="oche"></i></div>
+        </div>
+        <div class="vignette" aria-hidden="true"></div>
+        <div class="cam" id="stage"></div>
+      </div>
+      <div id="panel"></div>
+    </main>
+    <aside id="update" class="toast" hidden>
+      <span>New version ready.</span><button id="apply">Update game</button>
+    </aside>
+    <p id="storage-note" class="toast" hidden>
+      Storage is unavailable. This session can still be played.
+    </p>
     <dialog id="modal"><div id="sheet"></div></dialog>
     <div id="announce" class="sr" role="status" aria-live="polite"></div>
     <noscript>Enable JavaScript to play Dartshift.</noscript>

@@ -58,3 +58,76 @@ A WebGL engine would add another rendering context, asset pipeline and offline p
 - WebKit fit the board and throw control within simulated safe areas at 320×568, 360×740, 375×667, 375×812, 390×844, 393×852 and 852×393. A two-line hint initially overflowed the available space at 360×740. The shorter hint fits. Visual checks also covered the desktop playfield and the held, flying and embedded poses.
 - WebKit cold-reloaded and completed a solo run after the local HTTP server stopped. Chromium applied the waiting worker over the previous production build, resumed an acknowledged visit on 150 points, and reached 153 after another dart. Offline reload retained those points, the 450-point best and mute.
 - **Physical iPhone checks remain.** Judge grip, loft, release sensitivity and touch-to-photon latency by hand. Measure sustained frame rate and thermal behaviour on an SE-class device, and check sound with the silent switch and different audio routes. This pass used the simulator and desktop engines. iOS 16.4 hardware and the public Pages deployment were outside the test run.
+
+## The room · 20 November 2026
+
+**Diagnosis.** The throw was already three-dimensional, but nothing around it was. Every screen sat in a website frame: a logo bar, a page header with an eyebrow and round counter, and a personal-best footer. In portrait on a 390×844 phone those strips took about 170 px, and the board was 270 px wide. The board lived in a bordered card on a flat black page, so the dart's perspective stopped at the card edge. The lobby used a 547 KB poster photograph, which was flat art of a different board in different light. Screens replaced one another: the handoff and results swapped the playfield out, and the results screen dropped the board and the darts that decided the match. Feedback was a line of text under the board.
+
+**Approach.** One persistent room, built from CSS 3D transforms. `#scene` holds three camera layers (wall, floor and the stage with the board, plate and dart) that all take the same `translate3d` per shot. The scene's `perspective-origin` is the bull, and its focal length is a multiple of the board width, so the room and the throw's projected dart share one vanishing point and one scale.
+- **Shots.** Five named shots: intro, wide (lobby), oche (play), step (between visits) and final (results).
+- **The oche shot is the identity transform.** During play the board, grip and dart are laid out exactly as an untransformed page, so `src/input.js` and `src/throw.js` measure the same geometry they always have.
+- **The room's light.** One warm lamp pool up and to the left matches the shading already baked into the board face and dart shadows. A floor plane with the mat and oche line is rotated 90° into the room. There is a skirting line, a catch-ring surround and a neon sign for the wide shots.
+- **HUD placement.** The score plate hangs on the wall above the board and moves with the camera, so it is lit and framed with the board you are reading it against. Back, help and sound are screen-space glass buttons that stay 44 px and reachable in every shot. The cards (modes, handoff, results) are screen-space overlays that cross-fade.
+- **Feedback moments.** A score callout pops at the impact point. Hits of 40 or more flare the lamp. A visit of 100+ gets a second flare and a caller line ("Ton 40", "One hundred and eighty!"). The match end relights the neon with a short fanfare. A band-passed whoosh plays on release.
+- **No idle loop.** Every effect is a one-shot CSS animation with no idle loop, and reduced motion removes all of them.
+- **Tunables.** Camera, room, light and timing live in the commented "Scene tuning" block at the top of `style.css`, with the landscape and short-portrait overrides directly below. They are separate from the throw's `tune`.
+
+**Transitions never hold up play.** A capture-phase `pointerdown`/`keydown` handler finishes every running animation before the event reaches anything else. So a tap skips any camera move or card animation, and a throw always starts on the settled layout. Left alone:
+- The camera holds on the last dart for 420 ms, steps back over 480 ms, and the handoff card rises as the move ends.
+- A new visit dollies in over 560 ms, but the dart can be picked up immediately.
+- If a player never taps early, a visit transition costs about 0.5 s more than before: about 1 s across a solo run and 2.5 s across a duel. Tapping makes it zero.
+
+**Rejected alternatives.**
+- **WebGL (three.js or similar).** Rejected for four reasons:
+  - It adds about 150 KB gzipped of engine plus a second render path.
+  - Either the SVG board and dart move into textures, which means rewriting the throw and re-proving alignment, or they float in a separate layer over the canvas, which splits the light and the depth. A layered canvas would not share the throw's projection.
+  - Text in WebGL loses native accessibility.
+  - It costs GPU memory on SE-class phones.
+- **A pre-rendered room image.** It would cost one heavy image per orientation and density, its light could not follow the camera, and the camera could not move.
+- **Tilting the board during play.** It would put the scoring face in a different projection from the one the throw is tuned against. That changes where a release lands and needs `tune` retuned. The play shot stays square-on.
+- **The View Transitions API for screen changes.** It needs Safari 18, and the target is iOS 16.4. It also cross-fades screenshots rather than moving through one space.
+- **Device-motion parallax.** It needs a permission prompt on iOS and a running loop.
+- **Ambient idle animation** (flicker, dust). It breaks the no-idle-loop rule. The neon flickers only when it turns on.
+
+**Effect on the throw.** `src/input.js`, `src/throw.js`, `src/art.js` and `src/game.js` are unchanged. One CSS change touches the grip: its width is now rounded to an even whole pixel. WebKit snaps a transform's reference box to device pixels, so a fractional grip width (78.56 px) moved the dart's 50% origin by 0.22 px. The flight's final scale of about 0.5 turned that into a constant 0.11 px tip offset at 1×, and this was also the source of the earlier 0.066 px WebKit residual. With an even width, the tip finishes within 0.00002 CSS px of the saved point in both engines. Renders cancel any held aim, as before.
+
+**Saved data.** `dartshift.save.v1` keeps the same shape and validation: match, best, muted, acknowledged. A new session-only key, `dartshift.resume`, is written by Update game only while a match is on screen. The reload then returns straight to the interrupted visit instead of the lobby. Updating from the lobby or results still lands in the lobby.
+
+**Performance and size budget.**
+- **Frame budget.** The 16.7 ms frame budget and the iOS 16.4+ and SE-class targets stand.
+- **What changes during play.** The oche shot has no camera transform. Animations during a throw are the dart (unchanged), the one-shot callout and the lamp flare's opacity.
+- **Camera moves.** Camera moves only animate `transform` on three layers. The floor is the only `preserve-3d` element, and masks and gradients are static.
+- **At rest.** At rest nothing animates: `document.getAnimations()` is empty on the lobby, playfield, handoff and help sheet in both engines.
+- **Size.** The precache dropped from 1,059,271 to 530,577 bytes (−50%). The 547 KB lobby photograph and the old lane SVG are gone. HTML, CSS and JS grew from 17.9 to 23.3 KB gzipped (+5.4 KB). No fonts, images or packages were added.
+
+## Room verification · 20 November 2026
+
+- **Build.** All 14 Node tests passed. The production build precached 20 local assets.
+- **Desktop engines.** Playwright Chromium and WebKit played the production build under `/Darts/`:
+  - **Solo by swipe, both engines.** Each engine threw nine flights. The largest tip error at impact was 0.000021 CSS px, and the embedded dart sat within 0.000006 px of the saved point. Taps and downward strokes cost no dart. Flight frame intervals were 17.0 ms median and 18.0 ms 95th percentile in WebKit, and 16.7 and 17.8–18.4 ms in Chromium.
+  - **Keyboard duels.** 18-dart keyboard duels with reduced motion finished in both engines. Focus moved from the dart to the handoff button to Play again with no loss. Results totals matched the game's own scoring of the saved hits.
+  - **Other runs.**
+    - A reduced-motion solo by swipe finished in both engines.
+    - A landscape (852×393) touch duel finished in Chromium.
+    - Leaving during a flight saved the dart, and Resume continued the run in both engines.
+- **Two bugs found and fixed during verification.**
+  - Premium hits blanked the screen. The effect class `flare` on the scene also matched the lamp's `.flare` rule, which gave the whole scene the lamp's box and zero opacity. Effect classes are now prefixed `moment-`.
+  - The 0.11 px WebKit tip offset described above.
+- **Updates and offline, in both engines.**
+  - **Previous release to this build.** The previous release (main at 14d27f6) installed, part-played a solo run with mute on, then applied Update game. The new build kept the match, best, mute and acknowledged values and offered Resume.
+  - **During play.** An update from this build during play reloaded straight into the same visit.
+  - **Offline.** With the server stopped, a reload launched from cache, resumed, and took another dart.
+- **Layout audit.**
+  - **Sizes.** Every screen was checked at the seven sizes listed earlier with their insets, plus 667×375 and 932×430 landscape.
+  - **What it checks.** Board, plate, throw control, HUD and cards stay inside the safe area. The board's disc overlaps nothing. Every visible control is at least 44 px.
+  - **What it changed.** The landscape handoff and results framing, the SE results framing, and hiding the neon behind the landscape results card. The final run reported no problems.
+- **iPhone 17 simulator (iOS 27.2, real WebKit).** Headless WebKit screenshots do not composite 3D transforms, so the reviewed after-shots come from Chromium, and the simulator confirmed real rendering:
+  - **In Safari.** Update game moved from an earlier build to this one. A nine-dart solo run by touch ended on a treble 20, so the lamp flare, ton and neon relight all fired together without a blank frame.
+  - **Installed app.** In the Home Screen app, Update game moved from the previous release to this build and kept the 450-point best. The old build's button needed a second tap; that is the previous release's code. The room filled the standalone screen around the status bar and home indicator, and a touch throw landed.
+- **Physical iPhone checks remain.**
+  - Compositing cost of the camera moves and room layers on an SE-class GPU, sustained frame rate and heat.
+  - Touch-to-photon latency, and how the perspective reads at arm's length.
+  - Landscape on a notched phone with the real sensor housing.
+  - The whoosh and fanfare with the silent switch and different audio routes.
+  - iOS 16.4 itself. The CSS relies on `round()` (Safari 15.4), `dvh` (15.4) and `overflow: clip` (16).
+  - The public Pages deployment was not exercised.
