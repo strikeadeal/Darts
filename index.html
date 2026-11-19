@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#101110" />
+    <meta
+      name="description"
+      content="Nine darts. Three rounds. An offline darts arcade for solo runs and local duels."
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Dartshift" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./assets/icon-180.png" />
+    <link rel="icon" href="./assets/icon-192.png" />
+    <link
+      rel="preload"
+      href="./assets/fonts/Anton-Regular.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+    <link rel="stylesheet" href="./style.css" />
+    <title>Dartshift · Nine Dart Rush</title>
+  </head>
+  <body>
+    <div class="frame">
+      <header>
+        <button id="brand" aria-label="Dartshift home">
+          <svg viewBox="0 0 38 28" aria-hidden="true">
+            <path d="M1 7 38 3l-3 7H10zm9 6h24l-3 6H18zm10 9h10l-3 5z" /></svg
+          ><span>DARTSHIFT</span>
+        </button>
+        <nav aria-label="Game controls">
+          <button id="help"></button><button id="audio"></button>
+        </nav>
+      </header>
+      <main id="main"></main>
+      <footer>
+        <span id="record"></span
+        ><span class="footer-flights" aria-hidden="true">///</span>
+      </footer>
+      <aside id="update" hidden>
+        <span>New version ready.</span><button id="apply">Update game</button>
+      </aside>
+      <p id="storage-note" hidden>
+        Storage is unavailable. This session can still be played.
+      </p>
+    </div>
+    <dialog id="modal"><div id="sheet"></div></dialog>
+    <div id="announce" class="sr" role="status" aria-live="polite"></div>
+    <noscript>Enable JavaScript to play Dartshift.</noscript>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
