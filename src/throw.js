@@ -22,9 +22,8 @@ export const tune = {
     arcByPace: 0.075, // apex lift in board widths before projection
   },
   hand: {
-    side: 0.23,
     pitch: 0.84,
-    roll: 0.35, // tail vector (x, y), roll in radians
+    roll: 0.35, // radians around the shaft
     drawScale: 1.13,
     extendScale: 0.9,
     drawDrop: 0.06,
