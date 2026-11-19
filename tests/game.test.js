@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   scoreAt,
+  radii,
   freshMatch,
   advance,
   status,
@@ -85,12 +86,25 @@ test("saved match rejects unknown modes, invalid coordinates and excess darts", 
     assert.equal(decodeMatch(x), null);
 });
 test("swipe direction and distance determine the impact in board coordinates", () => {
-  assert.deepEqual(swipeLanding(0, -184, 400), { x: 0, y: 0 });
-  assert.deepEqual(swipeLanding(30, -124, 400), swipeLanding(15, -62, 200));
-  assert.ok(swipeLanding(-40, -184, 400).x < 0);
-  assert.ok(swipeLanding(40, -184, 400).x > 0);
-  assert.ok(swipeLanding(0, -250, 400).y < 0);
-  assert.ok(swipeLanding(0, -80, 400).y > 0);
+  for (const width of [169, 227, 340, 400]) {
+    assert.equal(swipeLanding(0, -(width / 3 - 1), width), null);
+    const minimum = swipeLanding(0, -width / 3, width);
+    assert.ok(minimum.y > radii.edge);
+    const formerBull = swipeLanding(0, -0.46 * width, width);
+    assert.ok(formerBull.y > radii.outerBull);
+    assert.deepEqual(swipeLanding(0, -0.75 * width, width), { x: 0, y: 0 });
+    for (const sign of [-1, 1]) {
+      const rise = width * (0.75 + (sign * 166) / (422 * 1.25));
+      const hit = swipeLanding(0, -rise, width);
+      assert.equal(
+        scoreAt(hit.x, hit.y).label,
+        sign > 0 ? "Double 20" : "Double 3",
+      );
+    }
+  }
+  assert.deepEqual(swipeLanding(30, -240, 400), swipeLanding(15, -120, 200));
+  assert.ok(swipeLanding(-40, -300, 400).x < 0);
+  assert.ok(swipeLanding(40, -300, 400).x > 0);
   const miss = swipeLanding(0, -550, 400);
   assert.equal(scoreAt(miss.x, miss.y).points, 0);
   assert.ok(decodeMatch(advance(freshMatch("solo"), miss)));
@@ -102,6 +116,7 @@ test("taps, tremor, downward and predominantly sideways swipes cost no dart", ()
     [0, 100],
     [120, -10],
     [-120, -30],
+    [600, -150],
   ])
     assert.equal(swipeLanding(dx, dy, 400), null);
 });

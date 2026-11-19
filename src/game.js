@@ -74,13 +74,13 @@ export function advance(match, point) {
   return { ...match, hits: [...match.hits, { x: point.x, y: point.y }] };
 }
 
-// The player's stroke is measured in board widths. A straight stroke of 0.46
+// The player's stroke is measured in board widths. A straight stroke of 0.75
 // widths reaches the bull. Outer coordinates still represent legitimate misses.
 export function swipeLanding(dx, dy, boardWidth) {
   const rise = -dy;
   if (
     boardWidth <= 0 ||
-    rise < Math.max(18, boardWidth * 0.06) ||
+    rise < boardWidth / 3 ||
     rise < Math.abs(dx) * 0.35
   )
     return null;
@@ -88,6 +88,6 @@ export function swipeLanding(dx, dy, boardWidth) {
   const limit = (value) => Math.max(-201, Math.min(201, value));
   return {
     x: limit(dx * unitsPerPixel),
-    y: limit((boardWidth * 0.46 - rise) * unitsPerPixel),
+    y: limit((boardWidth * 0.75 - rise) * unitsPerPixel),
   };
 }

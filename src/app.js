@@ -112,7 +112,7 @@ function sheet(title, body, bind) {
 function help() {
   sheet(
     "How to play",
-    '<ol class="steps"><li><strong>Swipe up and lift.</strong><small>Start on the dart or anywhere in the playfield.</small></li><li><strong>Angle your swipe.</strong><small>Swipe left or right as you move up to choose your line.</small></li><li><strong>Choose your distance.</strong><small>A longer swipe reaches higher. Try half a board width for the bull.</small></li></ol><p class="body-copy">Three darts per visit, three visits each. The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50. Highest total wins.</p><button class="primary full" id="okay">Got it</button>',
+    '<ol class="steps"><li><strong>Swipe up and lift.</strong><small>Start on the dart and swipe up at least a third of the board’s width.</small></li><li><strong>Angle your swipe.</strong><small>Swipe left or right as you move up to choose your line.</small></li><li><strong>Choose your distance.</strong><small>A longer swipe reaches higher. Aim for three-quarters of a board width for the bull.</small></li></ol><p class="body-copy">Three darts per visit, three visits each. The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50. Highest total wins.</p><button class="primary full" id="okay">Got it</button>',
     () => ($("#okay").onclick = () => $("#modal").close()),
   );
 }
@@ -122,7 +122,7 @@ function start(mode) {
   save();
   play();
   say(
-    "Round one. Swipe up on the playfield to throw. A longer swipe lands higher.",
+    "Round one. Swipe up at least a third of the board’s width to throw. A longer swipe lands higher.",
   );
 }
 function selectMode(mode) {
@@ -172,9 +172,9 @@ function play(impactClass = "") {
       "</button></div>"
     : `<button class="throw-control" id="throw" aria-label="Throw dart" aria-describedby="throw-keys">
          <span class="dart-grip">${readyDart}</span>
-         <b>Swipe up to throw</b><small>Longer swipes land higher</small>
+         <b>Swipe up to throw</b><small>Swipe at least ⅓ of the board’s width</small>
        </button>
-       <span class="sr" id="throw-keys">Swipe up on the playfield. On a keyboard, aim with the arrows, then press and release Space or Enter. Shift and arrows fine-tune your aim.</span>`;
+       <span class="sr" id="throw-keys">Swipe up at least a third of the board’s width. On a keyboard, aim with the arrows, then press and release Space or Enter. Shift and arrows fine-tune your aim.</span>`;
   const round = between ? Math.floor((n - 1) / (duel ? 6 : 3)) + 1 : s.round;
   const remaining = between ? 0 : 4 - s.dart;
   const opponent = duel

@@ -57,7 +57,7 @@ export function bindThrows(field, wakeAudio, land, hint) {
     if (point) land(point);
     else {
       reset();
-      hint("Swipe up toward the board. A longer swipe lands higher.");
+      hint("Swipe up at least ⅓ of the board’s width.");
     }
   };
   field.onpointercancel = field.onlostpointercapture = (event) => {
