@@ -1,3 +1,4 @@
+import { dartPose } from "./art.js";
 import { swipeLanding } from "./game.js";
 
 export function bindThrows(field, wakeAudio, land, hint) {
@@ -154,10 +155,14 @@ export function flyDart(field, point) {
     ((point.x + 211) * board.width) / 422 -
     (grip.left + grip.width / 2);
   const y = board.top + ((point.y + 211) * board.height) / 422 - grip.top;
+  // Convert the embedded SVG dimensions into the ready dart's CSS pixels.
+  const scale = ((board.width / 422) * dartPose.length) / grip.height;
   return dart.animate(
     [
       { transform: dart.style.transform || "none" },
-      { transform: `translate(${x}px,${y}px) rotate(-32deg) scale(.24)` },
+      {
+        transform: `translate(${x}px,${y}px) rotate(${dartPose.angle}deg) scale(${scale * dartPose.scaleX}, ${scale * dartPose.scaleY})`,
+      },
     ],
     { duration: 190, easing: "cubic-bezier(.18,.55,.38,1)", fill: "forwards" },
   );
