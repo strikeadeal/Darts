@@ -112,7 +112,7 @@ function sheet(title, body, bind) {
 function help() {
   sheet(
     "How to play",
-    '<ol class="steps"><li><strong>Swipe up and lift.</strong><small>Start on the dart and swipe up at least a third of the board’s width.</small></li><li><strong>Angle your swipe.</strong><small>Swipe left or right as you move up to choose your line.</small></li><li><strong>Choose your distance.</strong><small>A longer swipe reaches higher. Swipe straight up 60% of the board’s width for the bull.</small></li></ol><p class="body-copy">Three darts per visit, three visits each. The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50. Highest total wins.</p><button class="primary full" id="okay">Got it</button>',
+    '<ol class="steps"><li><strong>Pick up the dart.</strong><small>Touch the dart or the playfield. Swipe up at least a third of the board’s width and lift.</small></li><li><strong>Throw along your line.</strong><small>Angle left or right. A longer stroke reaches higher. Start with a straight stroke just over half a board wide.</small></li><li><strong>Finish with a flick.</strong><small>A quick finish carries higher on a flatter arc. Ease off for a lower hit. A sideways flick trims your line.</small></li></ol><p class="body-copy">Three darts per visit, three visits each. The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50. Highest total wins.</p><button class="primary full" id="okay">Got it</button>',
     () => ($("#okay").onclick = () => $("#modal").close()),
   );
 }
@@ -122,7 +122,7 @@ function start(mode) {
   save();
   play();
   say(
-    "Round one. Swipe up at least a third of the board’s width to throw. A longer swipe lands higher.",
+    "Round one. Swipe up at least a third of the board’s width to throw. A longer stroke or quicker finish lands higher.",
   );
 }
 function selectMode(mode) {
@@ -172,7 +172,7 @@ function play(impactClass = "") {
       "</button></div>"
     : `<button class="throw-control" id="throw" aria-label="Throw dart" aria-describedby="throw-keys">
          <span class="dart-grip">${readyDart}</span>
-         <b>Swipe up to throw</b><small>Swipe at least ⅓ of the board’s width</small>
+         <b>Swipe up to throw</b><small>At least ⅓ board width · Flick faster for height</small>
        </button>
        <span class="sr" id="throw-keys">Swipe up at least a third of the board’s width. On a keyboard, aim with the arrows, then press and release Space or Enter. Shift and arrows fine-tune your aim.</span>`;
   const round = between ? Math.floor((n - 1) / (duel ? 6 : 3)) + 1 : s.round;
@@ -224,7 +224,7 @@ function play(impactClass = "") {
       say(hint);
     });
 }
-function land(point) {
+function land(point, held) {
   const keyboard = document.activeElement?.id === "throw";
   const hit = scoreAt(point.x, point.y);
   match = advance(match, point);
@@ -234,12 +234,17 @@ function land(point) {
   save();
   const field = $(".play-grid");
   field.setAttribute("aria-busy", "true");
-  const flight = flyDart(field, point);
+  let sounded = false;
+  function contact() {
+    if (!sounded && !muted) impact(hit.points);
+    sounded = true;
+  }
+  const flight = flyDart(field, point, held, contact, s.complete);
   function showLanding() {
     if (cancelAim !== showLanding) return;
     cancelAim = () => {};
     flight?.cancel();
-    if (!muted) impact(hit.points);
+    contact();
     play(hit.points >= 40 ? "impact premium" : "impact");
     $(".hitline")?.classList.add("flash");
     say(

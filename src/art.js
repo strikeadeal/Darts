@@ -1,4 +1,5 @@
 import { sectors, radii } from "./game.js";
+import { boardPosition, entryPose, tune } from "./throw.js";
 const paths = {
   wing: '<path fill="currentColor" stroke="none" d="M1 5 25 3l-2.5 5H7zm7 5h14l-2 4h-7zm6 6h5l-2 4z"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.6 2.6 0 1 1 4.4 2c-1.2.9-2 1.3-2 3m0 2v.2"/>',
@@ -50,9 +51,6 @@ function band(a, b, inner, outer, color) {
     ' Z"/>'
   );
 }
-// The local dart origin is the end of its steel point in all three poses.
-export const dartPose = { length: 126, angle: -32, scaleX: 0.36, scaleY: 0.3 };
-
 const barrelGrooves = [21, 24, 28, 34, 37, 41]
   .map(
     (y) =>
@@ -71,28 +69,84 @@ const dartDefinitions = `
     <stop stop-color="#8a1021"/><stop offset=".28" stop-color="#ff6770"/>
     <stop offset=".48" stop-color="#e43543"/><stop offset="1" stop-color="#700c1e"/>
   </linearGradient>
-  <linearGradient id="near-fin" x2=".9" y2=".75">
-    <stop stop-color="#fc4851"/><stop offset=".55" stop-color="#d01935"/><stop offset="1" stop-color="#710f27"/>
-  </linearGradient>
-  <linearGradient id="fold" x2=".8" y2=".6">
-    <stop stop-color="#ff6b6e"/><stop offset=".48" stop-color="#e92543"/><stop offset="1" stop-color="#a2112c"/>
-  </linearGradient>
-  <g id="dart-model">
+  <g id="dart-body">
     <path d="M0 0 2.1 19h-4.2Z" fill="url(#steel)"/>
     <path d="M-2.1 15q-3.1 2-3.1 6v21q0 3 2.3 5h5.8q2.3-2 2.3-5V21q0-4-3.1-6Z" fill="url(#steel)"/>
     ${barrelGrooves}
     <path d="M-3 46q3 1 6 0l1.2 33-3.6 25-4-25Z" fill="url(#red-shaft)"/>
-    <path d="M0 78Q11 53 17 54q8 1 9 9l-5 28L3 113Z" fill="#9d1732"/>
-    <path d="M0 78 16 56 7 90 2 103Z" fill="#ce2940"/>
-    <path d="M1 82Q-12 59-24 62q-8 2-7 12l4 23q1 5 6 9l19 17 5-14Z" fill="url(#near-fin)"/>
-    <path d="M-28 67q4-7 14 0l15 19-3 21Z" fill="url(#fold)"/>
-    <path d="M-27 66q5-4 11 .2" fill="none" stroke="#ffb3ad" stroke-width=".9"/>
-    <path d="M2 81q13-14 22-15 6 0 6 7l-2 23q-1 7-5 11L6 125l-7-6Z" fill="url(#near-fin)"/>
-    <path d="M3 81q12-12 21-14L8 103l-2 21-6-6Z" fill="url(#fold)"/>
-    <path d="m1 79 2 4-3 35-3-5Z" fill="#670e22"/>
+  </g>
+  <g id="dart-fin" transform="scale(.77 1)">
+    <path d="M0 76Q15 58 24 60Q30 61 30 68L26 94Q25 100 19 106L0 125Z" stroke="#771e2a" stroke-width=".6"/>
+    <path d="M0 76Q17 60 24 62L0 110Z" fill="#ff8a76" opacity=".42"/>
   </g>`;
 
-export const readyDart = `<svg class="ready-dart" viewBox="-33 0 66 ${dartPose.length}" aria-hidden="true"><use href="#dart-model"/></svg>`;
+// The tip is the origin. The shaft axis points towards the camera, with
+// screen components ax, ay. Project four vanes around it using two radial
+// unit vectors. Order them far-to-near so the folds pass in front on roll.
+const modelLength = 126;
+function geometry({ ax, ay, roll }) {
+  const az = Math.sqrt(Math.max(0, 1 - ax * ax - ay * ay));
+  const h = Math.hypot(ax, az);
+  const body = `rotate(${(Math.atan2(-ax, ay) * 180) / Math.PI}) scale(1 ${Math.hypot(ax, ay)})`;
+  const fins = [];
+  for (let i = 0; i < 4; i++) {
+    const angle = roll + (i * Math.PI) / 2;
+    const c = Math.cos(angle),
+      s = Math.sin(angle);
+    const rx = (az * c - ax * ay * s) / h,
+      ry = h * s;
+    const rz = (-ax * c - ay * az * s) / h;
+    fins.push({
+      transform: `matrix(${rx} ${ry} ${ax} ${ay} 0 0)`,
+      depth: rz,
+      light: Math.round(37 + 13 * Math.cos(angle - 0.7)),
+    });
+  }
+  return { body, fins: fins.sort((a, b) => a.depth - b.depth) };
+}
+
+function model(pose) {
+  const { body, fins } = geometry(pose);
+  return (
+    `<use href="#dart-body" transform="${body}"/>` +
+    fins
+      .map(
+        (fin) =>
+          `<use href="#dart-fin" transform="${fin.transform}" fill="hsl(352,76%,${fin.light}%)"/>`,
+      )
+      .join("")
+  );
+}
+
+// Only this foreground subtree changes during flight. The barrel and four fins reuse static paths.
+export function poseModel(group, pose) {
+  const { body, fins } = geometry(pose);
+  group.children[0].setAttribute("transform", body);
+  fins.forEach((fin, i) => {
+    const vane = group.children[1 + i];
+    vane.setAttribute("transform", fin.transform);
+    vane.setAttribute("fill", `hsl(352,76%,${fin.light}%)`);
+  });
+}
+export const rest = {
+  ax: tune.hand.side,
+  ay: tune.hand.pitch,
+  roll: tune.hand.roll,
+};
+export const readyDart = `<svg class="ready-dart" viewBox="-33 0 66 ${modelLength}" aria-hidden="true"><g>${model(rest)}</g></svg>`;
+
+function shadow(pose) {
+  const f = tune.flight,
+    factor = f.length / modelLength;
+  const ax = pose.ax + f.shadowX,
+    ay = pose.ay + f.shadowY;
+  const angle = (Math.atan2(-ax, ay) * 180) / Math.PI;
+  return `<path transform="scale(${factor}) rotate(${angle}) scale(1 ${Math.hypot(ax, ay)})" d="M0 0 3 18 4 45 2 74 18 62 19 92 1 125 -14 99 -17 65 -2 75 -3 45 -3 18Z" fill="#080909" opacity=".45"/>`;
+}
+export function approachShadow(hit) {
+  const p = boardPosition(hit);
+  return `<g transform="translate(${p.x} ${p.y})">${shadow(entryPose(hit))}</g>`;
+}
 
 function boardFace() {
   const beds = [],
@@ -141,18 +195,22 @@ function boardFace() {
 const face = boardFace();
 
 export function board(hits, impactClass = "") {
-  const { angle, scaleX, scaleY } = dartPose;
   const darts = hits
-    .map(({ x, y }, i) => {
+    .map((hit, i) => {
       const effect = i === hits.length - 1 ? impactClass : "";
-      return `<g class="landed ${effect}" transform="translate(${x} ${y})">
+      const p = boardPosition(hit),
+        pose = entryPose(hit);
+      return `<g class="landed ${effect}" transform="translate(${p.x} ${p.y})">
       <circle class="impact-ring" r="13" fill="none" stroke-width="2"/>
-      <g transform="rotate(-45)">
-        <path d="M0 0 2 21 8 25 7 42 2 46-5 39-6 26-1 23Z" fill="#110f10" opacity=".36"/>
-      </g>
-      <use href="#dart-model" transform="rotate(${angle}) scale(${scaleX} ${scaleY})"/>
-    </g>`;
+      ${shadow(pose)}
+      <g class="embedded" style="--settle:${tune.flight.settleMs}ms;--flex:${tune.flight.flex}deg;--rebound:${-tune.flight.flex / 2}deg">
+        <g transform="scale(${tune.flight.length / modelLength})">${model(pose)}</g>
+      </g></g>`;
     })
     .join("");
-  return `<svg class="board" viewBox="-211 -211 422 422" aria-label="Dartboard, twenty at the top">${face}${darts}</svg><span id="sight" hidden></span>`;
+  return `<svg class="board" viewBox="-211 -211 422 422" role="img" aria-label="Dartboard, twenty at the top">
+    <g class="board-plane" transform="matrix(1 0 ${tune.camera.skew} ${tune.camera.faceHeight} 0 0)">${face}</g></svg>
+    <svg class="board-objects" viewBox="-211 -211 422 422" aria-hidden="true"><g class="approach-shadow" opacity="0"></g>${darts}
+    <g id="sight" visibility="hidden" fill="none" stroke-width="2"><circle r="10" stroke="#151515" stroke-width="5"/><circle r="10" stroke="#fff"/><circle r="2" fill="#ff5732"/></g>
+  </svg>`;
 }

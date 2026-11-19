@@ -71,24 +71,12 @@ export function status(match) {
 
 export function advance(match, point) {
   if (status(match).complete) return match;
-  return { ...match, hits: [...match.hits, { x: point.x, y: point.y }] };
+  const hit = { x: point.x, y: point.y };
+  if (Number.isFinite(point.pace) && Number.isFinite(point.line)) {
+    hit.pace = point.pace;
+    hit.line = point.line;
+  }
+  return { ...match, hits: [...match.hits, hit] };
 }
 
-// Distances scale with the board. A straight swipe of 60% reaches the bull.
-export function swipeLanding(dx, dy, boardWidth) {
-  const rise = -dy;
-  if (
-    boardWidth <= 0 ||
-    rise < boardWidth / 3 ||
-    rise < Math.abs(dx) * 0.35
-  )
-    return null;
-  const horizontalUnitsPerPixel = (422 * 1.25) / boardWidth;
-  // Leave room below double 3 between the shortest throw and the bull.
-  const verticalUnitsPerPixel = 700 / boardWidth;
-  const limit = (value) => Math.max(-201, Math.min(201, value));
-  return {
-    x: limit(dx * horizontalUnitsPerPixel),
-    y: limit((boardWidth * 0.6 - rise) * verticalUnitsPerPixel),
-  };
-}
+export { swipeLanding } from "./throw.js";

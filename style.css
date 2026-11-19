@@ -438,7 +438,7 @@ dialog::backdrop {
 .play-grid {
   border: 1px solid var(--edge);
   border-radius: 4px;
-  background: radial-gradient(ellipse at 50% 35%, #252722, #141614 70%);
+  background: #242820 url(./assets/oche.svg) center / 100% 100% no-repeat;
   position: relative;
   touch-action: none;
   overflow: hidden;
@@ -490,33 +490,7 @@ dialog::backdrop {
   font:
     700 20px/1 system-ui,
     sans-serif;
-  filter: drop-shadow(3px 7px 4px #060808a8);
-}
-#sight {
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  left: 0;
-  top: 0;
-  margin: -10px 0 0 -10px;
-  border: 2px solid white;
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 2px #151515,
-    0 0 10px #111;
-  pointer-events: none;
-  will-change: transform;
-}
-#sight:after {
-  content: "";
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  border-radius: 100%;
-  width: 4px;
-  height: 4px;
-  background: var(--hot);
-  box-shadow: 0 0 0 1px #181818;
+  filter: drop-shadow(4px 9px 4px #060808bd);
 }
 .hitline {
   text-align: center;
@@ -545,6 +519,8 @@ dialog::backdrop {
   height: clamp(68px, 12dvh, 124px);
   aspect-ratio: 66 / 126;
   margin: -8px 0 5px;
+  position: relative;
+  left: 5%;
   pointer-events: none;
 }
 .ready-dart {
@@ -553,7 +529,7 @@ dialog::backdrop {
   height: 100%;
   overflow: visible;
   transform-origin: 50% 0;
-  filter: drop-shadow(2px 4px 3px #080a0880);
+  pointer-events: none;
 }
 .throw-control b {
   font: var(--race);
@@ -926,4 +902,22 @@ html {
       calc(100dvh - var(--top) - var(--bottom) - min(43dvh, 100vw - 50px) - 278px)
     );
   }
+}
+
+.impact .embedded {
+  animation: shaft-settle var(--settle) ease-out;
+}
+@keyframes shaft-settle {
+  0%, 100% { transform: rotate(0); }
+  22% { transform: rotate(var(--flex)); }
+  58% { transform: rotate(var(--rebound)); }
+}
+
+.board-objects {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
 }

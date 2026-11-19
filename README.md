@@ -6,7 +6,7 @@
 
 1. Pick **Solo run** or **Local duel**.
 2. Put your finger on the dart beneath the board, or start anywhere inside the playfield.
-3. Swipe upward at least a third of the board’s width, then lift. Angle the swipe to send the dart left or right. A longer swipe lands higher. Try a straight swipe of 60% of the board’s width for the bull. Short or downward strokes cost no dart.
+3. Swipe upward at least a third of the board’s width, then lift. Angle the swipe to send the dart left or right. Start with a straight stroke just over half a board wide. A longer stroke or quicker finish carries higher. Ease off for a lower hit, or flick sideways to trim your line. Short or downward strokes cost no dart.
 
 Each player throws three darts per visit and gets three visits. The thin inner ring scores treble and the outer ring double. The outer bull scores 25, the centre scores 50, and a miss uses one dart for zero points. The maximum is 540. Duels alternate visits and equal totals draw.
 
@@ -39,7 +39,8 @@ Push to `main`. The Pages workflow runs the scoring tests, builds `dist/`, uploa
 
 ## Code and verification
 
-- `src/game.js` contains board scoring, deterministic aim, match progression and saved-match validation. `tests/game.test.js` exercises those rules with Node's built-in test runner.
+- `src/game.js` contains board scoring, match progression and saved-match validation. `tests/game.test.js` exercises those rules with Node's built-in test runner.
+- `src/throw.js` holds the release model and the tuning values for gesture sensitivity, camera, flight, grip and impact.
 - `src/input.js` owns pointer capture, keyboard input, frame-timed presentation and cancellation. `src/art.js` draws the playable board from the scoring constants.
 - `scripts/build.mjs` hashes the shipped files and worker template, then emits the scoped precache worker. Every font and image is local. The OFL font licenses are in `assets/fonts/`.
 - [Design decisions](DECISIONS.md) covers the rules, iOS trade-offs and device checks.
@@ -50,4 +51,4 @@ Next up would be personal-best round splits and a 301 checkout mode. This releas
 
 ### Verification limits
 
-The production build was exercised under `/Darts/` in Chromium, WebKit and an iPhone 17 simulator. Safari installation, home-screen launch and a complete touch-driven solo match passed in the simulator. The installed app also cold-launched with the server stopped and retained its record after a release update. Browser tests separately verified an in-progress match across a worker update. Physical iPhone performance, silent-switch behavior and the first live Pages deployment still need confirmation. Exact viewport checks and timing measurements are in [DECISIONS.md](DECISIONS.md).
+The physical throw was checked under `/Darts/` in Chromium, WebKit and the installed iPhone 17 simulator app. Checks covered full solo and duel matches, keyboard and reduced motion, saved-point alignment, offline reload and service-worker updates. Physical iPhone touch feel and sustained SE-class frame rate need hardware testing. [Design decisions](DECISIONS.md) records the simulator strokes, frame timings and viewport results.
