@@ -6,7 +6,7 @@
 
 1. Pick **Solo run** or **Local duel**.
 2. Put your finger on the dart beneath the board, or start anywhere inside the playfield.
-3. Swipe upward at least a third of the board’s width, then lift. Angle the swipe to send the dart left or right. A longer swipe lands higher. Try a straight swipe of three-quarters of the board’s width for the bull. Short or downward strokes cost no dart.
+3. Swipe upward at least a third of the board’s width, then lift. Angle the swipe to send the dart left or right. A longer swipe lands higher. Try a straight swipe of 60% of the board’s width for the bull. Short or downward strokes cost no dart.
 
 Each player throws three darts per visit and gets three visits. The thin inner ring scores treble and the outer ring double. The outer bull scores 25, the centre scores 50, and a miss uses one dart for zero points. The maximum is 540. Duels alternate visits and equal totals draw.
 

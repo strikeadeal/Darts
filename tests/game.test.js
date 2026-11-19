@@ -92,14 +92,14 @@ test("swipe direction and distance determine the impact in board coordinates", (
     assert.ok(minimum.y > radii.edge);
     const formerBull = swipeLanding(0, -0.46 * width, width);
     assert.ok(formerBull.y > radii.outerBull);
-    assert.deepEqual(swipeLanding(0, -0.75 * width, width), { x: 0, y: 0 });
-    for (const sign of [-1, 1]) {
-      const rise = width * (0.75 + (sign * 166) / (422 * 1.25));
-      const hit = swipeLanding(0, -rise, width);
-      assert.equal(
-        scoreAt(hit.x, hit.y).label,
-        sign > 0 ? "Double 20" : "Double 3",
-      );
+    assert.ok(swipeLanding(0, -0.75 * width, width).y < -radii.outerBull);
+    assert.deepEqual(swipeLanding(0, -0.6 * width, width), { x: 0, y: 0 });
+    for (const [fraction, label] of [
+      [0.363, "Double 3"],
+      [0.837, "Double 20"],
+    ]) {
+      const hit = swipeLanding(0, -fraction * width, width);
+      assert.equal(scoreAt(hit.x, hit.y).label, label);
     }
   }
   assert.deepEqual(swipeLanding(30, -240, 400), swipeLanding(15, -120, 200));
