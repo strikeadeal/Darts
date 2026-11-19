@@ -74,8 +74,7 @@ export function advance(match, point) {
   return { ...match, hits: [...match.hits, { x: point.x, y: point.y }] };
 }
 
-// The player's stroke is measured in board widths. A straight stroke of 0.75
-// widths reaches the bull. Outer coordinates still represent legitimate misses.
+// Distances scale with the board. A straight swipe of 60% reaches the bull.
 export function swipeLanding(dx, dy, boardWidth) {
   const rise = -dy;
   if (
@@ -84,10 +83,12 @@ export function swipeLanding(dx, dy, boardWidth) {
     rise < Math.abs(dx) * 0.35
   )
     return null;
-  const unitsPerPixel = (422 * 1.25) / boardWidth;
+  const horizontalUnitsPerPixel = (422 * 1.25) / boardWidth;
+  // Leave room below double 3 between the shortest throw and the bull.
+  const verticalUnitsPerPixel = 700 / boardWidth;
   const limit = (value) => Math.max(-201, Math.min(201, value));
   return {
-    x: limit(dx * unitsPerPixel),
-    y: limit((boardWidth * 0.75 - rise) * unitsPerPixel),
+    x: limit(dx * horizontalUnitsPerPixel),
+    y: limit((boardWidth * 0.6 - rise) * verticalUnitsPerPixel),
   };
 }

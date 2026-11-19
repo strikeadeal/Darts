@@ -112,7 +112,7 @@ function sheet(title, body, bind) {
 function help() {
   sheet(
     "How to play",
-    '<ol class="steps"><li><strong>Swipe up and lift.</strong><small>Start on the dart and swipe up at least a third of the board’s width.</small></li><li><strong>Angle your swipe.</strong><small>Swipe left or right as you move up to choose your line.</small></li><li><strong>Choose your distance.</strong><small>A longer swipe reaches higher. Aim for three-quarters of a board width for the bull.</small></li></ol><p class="body-copy">Three darts per visit, three visits each. The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50. Highest total wins.</p><button class="primary full" id="okay">Got it</button>',
+    '<ol class="steps"><li><strong>Swipe up and lift.</strong><small>Start on the dart and swipe up at least a third of the board’s width.</small></li><li><strong>Angle your swipe.</strong><small>Swipe left or right as you move up to choose your line.</small></li><li><strong>Choose your distance.</strong><small>A longer swipe reaches higher. Swipe straight up 60% of the board’s width for the bull.</small></li></ol><p class="body-copy">Three darts per visit, three visits each. The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50. Highest total wins.</p><button class="primary full" id="okay">Got it</button>',
     () => ($("#okay").onclick = () => $("#modal").close()),
   );
 }
