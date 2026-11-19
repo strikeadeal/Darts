@@ -19,7 +19,7 @@ function handPose(dx = 0, dy = 0, width = 1) {
     x: steer * width * h.track,
     y: width * h.drawDrop * (1 - push) - push * width * h.reach,
     scale: mix(h.drawScale, h.extendScale, push),
-    ax: h.side - steer * h.steer,
+    ax: -steer * h.steer,
     ay: h.pitch - push * h.extendPitch,
     roll: h.roll + steer + h.extendRoll * push,
   };

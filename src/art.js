@@ -129,7 +129,7 @@ export function poseModel(group, pose) {
   });
 }
 export const rest = {
-  ax: tune.hand.side,
+  ax: 0,
   ay: tune.hand.pitch,
   roll: tune.hand.roll,
 };
