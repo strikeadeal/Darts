@@ -5,12 +5,12 @@
 ## Play
 
 1. Pick **Solo run** or **Local duel**.
-2. Hold the orange throw pad. A moving white sight appears on the board.
-3. Drag your thumb to steer. Lift when the centre of the sight crosses your target. The tip lands at its last displayed position. A quick tap costs no dart.
+2. Put your finger on the dart beneath the board, or start anywhere inside the playfield.
+3. Swipe upward and lift. Angle the swipe to send the dart left or right. A longer swipe lands higher. Try a straight swipe of about half the board’s width for the bull. Taps and downward strokes cost no dart.
 
 Each player throws three darts per visit and gets three visits. The thin inner ring scores treble and the outer ring double. The outer bull scores 25, the centre scores 50, and a miss uses one dart for zero points. The maximum is 540. Duels alternate visits and equal totals draw.
 
-On a keyboard, focus the throw pad, hold Space or Enter, steer with the arrow keys, then release. Escape cancels the throw. The back arrow saves your place. Select the **Resume** mode button to continue after closing the game.
+On a keyboard, focus the dart, aim with the arrow keys, then press and release Space or Enter to throw. Shift and arrows make finer adjustments. Escape cancels. The back arrow saves your place. Select the **Resume** mode button to continue after closing the game.
 
 ## Install on iPhone
 

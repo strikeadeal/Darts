@@ -74,11 +74,20 @@ export function advance(match, point) {
   return { ...match, hits: [...match.hits, { x: point.x, y: point.y }] };
 }
 
-const clamp = (n) => Math.max(-201, Math.min(201, n));
-export function sightAt(steerX, steerY, elapsedMs, index) {
-  const phase = elapsedMs / 1000 + index * 0.37;
+// The player's stroke is measured in board widths. A straight stroke of 0.46
+// widths reaches the bull. Outer coordinates still represent legitimate misses.
+export function swipeLanding(dx, dy, boardWidth) {
+  const rise = -dy;
+  if (
+    boardWidth <= 0 ||
+    rise < Math.max(18, boardWidth * 0.06) ||
+    rise < Math.abs(dx) * 0.35
+  )
+    return null;
+  const unitsPerPixel = (422 * 1.25) / boardWidth;
+  const limit = (value) => Math.max(-201, Math.min(201, value));
   return {
-    x: clamp(steerX + 25 * Math.sin(phase * 3.4) + 9 * Math.sin(phase * 6.2)),
-    y: clamp(steerY + 35 + 20 * Math.cos(phase * 4.2)),
+    x: limit(dx * unitsPerPixel),
+    y: limit((boardWidth * 0.46 - rise) * unitsPerPixel),
   };
 }

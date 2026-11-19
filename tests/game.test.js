@@ -6,7 +6,7 @@ import {
   advance,
   status,
   decodeMatch,
-  sightAt,
+  swipeLanding,
 } from "../src/game.js";
 
 const sectors = [
@@ -84,13 +84,26 @@ test("saved match rejects unknown modes, invalid coordinates and excess darts", 
   ])
     assert.equal(decodeMatch(x), null);
 });
-test("sight is repeatable, steerable and moves during a hold", () => {
-  const a = sightAt(0, 0, 300, 0);
-  assert.deepEqual(a, sightAt(0, 0, 300, 0));
-  assert.notDeepEqual(a, sightAt(0, 0, 420, 0));
-  const b = sightAt(24, -12, 300, 0);
-  assert.equal(Math.round(b.x - a.x), 24);
-  assert.equal(Math.round(b.y - a.y), -12);
+test("swipe direction and distance determine the impact in board coordinates", () => {
+  assert.deepEqual(swipeLanding(0, -184, 400), { x: 0, y: 0 });
+  assert.deepEqual(swipeLanding(30, -124, 400), swipeLanding(15, -62, 200));
+  assert.ok(swipeLanding(-40, -184, 400).x < 0);
+  assert.ok(swipeLanding(40, -184, 400).x > 0);
+  assert.ok(swipeLanding(0, -250, 400).y < 0);
+  assert.ok(swipeLanding(0, -80, 400).y > 0);
+  const miss = swipeLanding(0, -550, 400);
+  assert.equal(scoreAt(miss.x, miss.y).points, 0);
+  assert.ok(decodeMatch(advance(freshMatch("solo"), miss)));
+});
+test("taps, tremor, downward and predominantly sideways swipes cost no dart", () => {
+  for (const [dx, dy] of [
+    [0, 0],
+    [2, -5],
+    [0, 100],
+    [120, -10],
+    [-120, -30],
+  ])
+    assert.equal(swipeLanding(dx, dy, 400), null);
 });
 test("mixed duel assigns both halves of all three rounds to the right player", () => {
   let m = freshMatch("duel");
