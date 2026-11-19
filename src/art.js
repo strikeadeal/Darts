@@ -83,6 +83,18 @@ function boardFace() {
     '" fill="#e34d32"/></g>'
   );
 }
+// Tip at the top centre so the flight transform lands on the scoring point.
+export const readyDart = `<svg class="ready-dart" viewBox="0 0 64 124" preserveAspectRatio="none" aria-hidden="true">
+  <defs><linearGradient id="barrel"><stop stop-color="#6d716d"/><stop offset=".35" stop-color="#fff4d9"/><stop offset=".58" stop-color="#b1b4ae"/><stop offset="1" stop-color="#5d615f"/></linearGradient></defs>
+  <path d="M32 0 34 24h-4z" fill="#d9ddd7"/>
+  <path d="m30 21-2 7v32l3 9h3l3-9V28l-3-7z" fill="url(#barrel)"/>
+  <path d="M28 32h9m-9 4h9m-9 5h9m-9 4h9m-9 5h9m-9 4h9" fill="none" stroke="#343936" stroke-width="1.4"/>
+  <path d="m30 66 1 47h3l1-47z" fill="#d25736"/>
+  <path d="M32 81 14 65 4 72l3 26 19 24 7-13z" fill="#ff5c36"/>
+  <path d="m32 81 15-15 12 5-2 25-19 26-6-13z" fill="#d33d21"/>
+  <path d="m32 79-6 22 2 20 5-12 4 10-1-22z" fill="#8e2b1d"/>
+  <path d="m8 74 5-4 12 10" fill="none" stroke="#ffac79" stroke-width="2"/>
+</svg>`;
 const face = boardFace();
 export function board(hits, impactClass = "") {
   const darts = hits
@@ -90,7 +102,7 @@ export function board(hits, impactClass = "") {
       const effect = i === hits.length - 1 ? impactClass : "";
       return `<g class="landed ${effect}" transform="translate(${x} ${y})">
       <circle class="impact-ring" r="13" fill="none" stroke-width="2"/>
-      <g class="shaft">
+      <g transform="scale(1,-1)">
         <path d="M0 0 14 -20" stroke="#0d1011" stroke-width="5"/>
         <path d="M0 0 14 -20" stroke="#efefdd" stroke-width="2.3"/>
         <path d="m10-14 2-10 9-8-1 10-6 6z" fill="#ff7045" stroke="#211813" stroke-width="1"/>

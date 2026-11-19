@@ -1,6 +1,6 @@
 import { freshMatch, decodeMatch, status, advance, scoreAt } from "./game.js";
-import { icon, board } from "./art.js";
-import { armPad } from "./input.js";
+import { icon, board, readyDart } from "./art.js";
+import { bindThrows, bindTurnButton, flyDart } from "./input.js";
 import { unlock, impact } from "./sound.js";
 
 const $ = (s) => document.querySelector(s);
@@ -112,7 +112,7 @@ function sheet(title, body, bind) {
 function help() {
   sheet(
     "How to play",
-    '<ol class="steps"><li><strong>Hold the throw pad.</strong><small>A white sight appears on the board.</small></li><li><strong>Drag to line up.</strong><small>Your thumb steers the moving sight.</small></li><li><strong>Lift to throw.</strong><small>The dart lands where the sight was.</small></li></ol><p class="body-copy">Three darts per visit, three visits each. The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50. Highest total wins.</p><button class="primary full" id="okay">Got it</button>',
+    '<ol class="steps"><li><strong>Swipe up and lift.</strong><small>Start on the dart or anywhere in the playfield.</small></li><li><strong>Angle your swipe.</strong><small>Swipe left or right as you move up to choose your line.</small></li><li><strong>Choose your distance.</strong><small>A longer swipe reaches higher. Try half a board width for the bull.</small></li></ol><p class="body-copy">Three darts per visit, three visits each. The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50. Highest total wins.</p><button class="primary full" id="okay">Got it</button>',
     () => ($("#okay").onclick = () => $("#modal").close()),
   );
 }
@@ -121,7 +121,9 @@ function start(mode) {
   acknowledged = -1;
   save();
   play();
-  say("Round one. Hold the pad, drag to aim and lift to throw.");
+  say(
+    "Round one. Swipe up on the playfield to throw. A longer swipe lands higher.",
+  );
 }
 function selectMode(mode) {
   wakeAudio();
@@ -162,15 +164,17 @@ function play(impactClass = "") {
   const lastHit =
     last && hits.length
       ? "<strong>+" + last.points + "</strong>" + last.label
-      : "Hold the pad to bring up your sight.";
+      : "";
   const action = between
     ? '<div class="between"><button class="primary" id="next">' +
       (duel ? "Pass to " + playerName(s.player) : "Start round " + s.round) +
       icon("arrow") +
       "</button></div>"
-    : '<button class="throw-pad" id="pad" aria-description="Hold, drag to aim and lift to throw. On a keyboard hold Space, steer with the arrow keys and release.">' +
-      icon("target") +
-      "<span><b>Hold to aim</b><small>Drag to steer · Lift to throw</small></span></button>";
+    : `<button class="throw-control" id="throw" aria-label="Throw dart" aria-describedby="throw-keys">
+         <span class="dart-grip">${readyDart}</span>
+         <b>Swipe up to throw</b><small>Longer swipes land higher</small>
+       </button>
+       <span class="sr" id="throw-keys">Swipe up on the playfield. On a keyboard, aim with the arrows, then press and release Space or Enter. Shift and arrows fine-tune your aim.</span>`;
   const round = between ? Math.floor((n - 1) / (duel ? 6 : 3)) + 1 : s.round;
   const remaining = between ? 0 : 4 - s.dart;
   const opponent = duel
@@ -206,48 +210,54 @@ function play(impactClass = "") {
     </section>`;
   $("#back").onclick = home;
   if (between)
-    $("#next").onclick = () => {
+    bindTurnButton($("#next"), () => {
       acknowledged = n;
       save();
       play();
       say(
         "Round " + s.round + ", " + (duel ? playerName(s.player) : "your turn"),
       );
-    };
+    });
   else
-    cancelAim = armPad(
-      $("#pad"),
-      $(".board-wrap"),
-      n,
-      wakeAudio,
-      land,
-      (hint) => {
-        $(".hitline").textContent = hint;
-        say(hint);
-      },
-    );
+    cancelAim = bindThrows($(".play-grid"), wakeAudio, land, (hint) => {
+      $(".hitline").textContent = hint;
+      say(hint);
+    });
 }
 function land(point) {
-  const keyboard = document.activeElement?.id === "pad";
+  const keyboard = document.activeElement?.id === "throw";
   const hit = scoreAt(point.x, point.y);
   match = advance(match, point);
   const s = status(match);
   if (s.complete && match.mode === "solo")
     best = Math.max(best ?? 0, s.totals[0]);
   save();
-  if (!muted) impact(hit.points);
-  play(hit.points >= 40 ? "impact premium" : "impact");
-  $(".hitline")?.classList.add("flash");
-  say(
-    hit.label +
-      ", " +
-      hit.points +
-      " points." +
-      (s.complete ? " Match complete." : ""),
-  );
-  if (keyboard)
-    ($("#pad") || $("#next") || $("#again"))?.focus({ preventScroll: true });
-  record();
+  const field = $(".play-grid");
+  field.setAttribute("aria-busy", "true");
+  const flight = flyDart(field, point);
+  function showLanding() {
+    if (cancelAim !== showLanding) return;
+    cancelAim = () => {};
+    flight?.cancel();
+    if (!muted) impact(hit.points);
+    play(hit.points >= 40 ? "impact premium" : "impact");
+    $(".hitline")?.classList.add("flash");
+    say(
+      hit.label +
+        ", " +
+        hit.points +
+        " points." +
+        (s.complete ? " Match complete." : ""),
+    );
+    if (keyboard)
+      ($("#throw") || $("#next") || $("#again"))?.focus({
+        preventScroll: true,
+      });
+    record();
+  }
+  cancelAim = showLanding;
+  if (flight) flight.finished.then(showLanding, showLanding);
+  else showLanding();
 }
 function finish() {
   const { totals } = status(match),
@@ -293,8 +303,8 @@ function finish() {
     '</tbody></table><div class="stack"><button class="primary" id="again">Play again ' +
     icon("arrow") +
     '</button><button class="secondary" id="lobby">Back to modes</button></div></section>';
-  $("#again").onclick = () => start(match.mode);
-  $("#lobby").onclick = home;
+  bindTurnButton($("#again"), () => start(match.mode));
+  bindTurnButton($("#lobby"), home);
 }
 window.addEventListener("blur", () => cancelAim());
 window.addEventListener("resize", () => cancelAim());
