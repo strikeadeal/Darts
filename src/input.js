@@ -4,6 +4,7 @@ import {
   boardPosition,
   clamp,
   entryPose,
+  onDart,
   releaseThrow,
   tune,
 } from "./throw.js";
@@ -30,7 +31,20 @@ function draw(dart, frame) {
   poseModel(dart.firstElementChild, frame);
 }
 
-export function bindThrows(field, wakeAudio, land, hint) {
+// Everything the flight needs from layout, read when the dart is picked up (after
+// any camera move has been finished) so release itself forces no layout.
+function measure(field) {
+  const board = field.querySelector(".board-wrap");
+  return {
+    grip: field.querySelector(".dart-grip").getBoundingClientRect(),
+    plane: board.querySelector(".board-plane").getScreenCTM(),
+    width: board.getBoundingClientRect().width,
+  };
+}
+
+// `skipped(event)` is the dart's painted box from before a camera move that this
+// touch finished early, so a touch where the player saw the dart still lands on it.
+export function bindThrows(field, wakeAudio, land, hint, skipped) {
   const board = field.querySelector(".board-wrap");
   const dart = field.querySelector(".ready-dart");
   const keyboardButton = field.querySelector("#throw");
@@ -52,14 +66,19 @@ export function bindThrows(field, wakeAudio, land, hint) {
     };
     draw(dart, held);
   }
-  function reset() {
+  // idle: only re-measure the resting grip, never cancel a stroke in progress.
+  function reset(idle) {
+    if (idle === true && (stroke || keyboardAim)) return;
     cancelAnimationFrame(pending);
     pending = 0;
     const id = stroke?.id;
     stroke = keyboardAim = held = null;
+    keyboardButton.classList.remove("held");
     sight.setAttribute("visibility", "hidden");
     if (field.isConnected) {
-      const boardScale = board.querySelector(".board-plane").getScreenCTM().a;
+      // Both from client rects (the board is 422 units wide), so the ratio holds
+      // mid camera move; getScreenCTM leaves out the room's perspective.
+      const boardScale = board.getBoundingClientRect().width / 422;
       const gripHeight = dart.parentElement.getBoundingClientRect().height;
       handScale = Math.max(
         1,
@@ -76,6 +95,16 @@ export function bindThrows(field, wakeAudio, land, hint) {
     const last = stroke.samples.at(-1);
     hold(handPose(last.x - stroke.x, last.y - stroke.y, stroke.width));
   }
+  // A touch away from the dart never throws. Point at the dart instead, unless
+  // the touch was spent finishing a camera move or effect.
+  function beckon() {
+    hint("Touch the dart to pick it up");
+    if (!motion.matches)
+      dart.parentElement.animate(
+        [{ scale: 1 }, { scale: 1.18 }, { scale: 1 }],
+        { duration: 360, easing: "ease-out" },
+      );
+  }
   field.onpointerdown = (event) => {
     if (
       !event.isPrimary ||
@@ -85,15 +114,18 @@ export function bindThrows(field, wakeAudio, land, hint) {
     )
       return;
     event.preventDefault();
+    const seen = skipped?.(event);
+    const { clientX: x, clientY: y } = event;
+    const box = dart.firstElementChild.getBoundingClientRect();
+    if (!onDart(x, y, box, seen?.width ? seen : undefined)) {
+      if (!seen) beckon();
+      return;
+    }
     reset();
     wakeAudio();
-    stroke = {
-      id: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      width: board.getBoundingClientRect().width,
-      samples: [],
-    };
+    keyboardButton.classList.add("held");
+    const geo = measure(field);
+    stroke = { id: event.pointerId, x, y, width: geo.width, geo, samples: [] };
     sample(event);
     field.setPointerCapture(event.pointerId);
     if (!motion.matches) paintHand();
@@ -110,16 +142,17 @@ export function bindThrows(field, wakeAudio, land, hint) {
   field.onpointerup = (event) => {
     if (stroke?.id !== event.pointerId) return;
     sample(event);
+    const { geo } = stroke;
     const point = releaseThrow(stroke, stroke.samples, stroke.width);
     cancelAnimationFrame(pending);
     pending = 0;
     stroke = null;
     if (field.hasPointerCapture(event.pointerId))
       field.releasePointerCapture(event.pointerId);
-    if (point) land(point, held);
+    if (point) land(point, held, geo);
     else {
       reset();
-      hint("Swipe up at least ⅓ of the board’s width, then lift.");
+      hint("Swipe up at least ⅓ board width");
     }
   };
   field.onpointercancel = field.onlostpointercapture = (event) => {
@@ -144,7 +177,7 @@ export function bindThrows(field, wakeAudio, land, hint) {
     )
       return;
     event.preventDefault();
-    keyboardAim ??= { x: 0, y: 35 };
+    keyboardAim ??= { x: 0, y: 35, geo: measure(field) };
     if (event.key === " " || event.key === "Enter") {
       if (!event.repeat) wakeAudio();
     } else {
@@ -176,9 +209,9 @@ export function bindThrows(field, wakeAudio, land, hint) {
     )
       return;
     event.preventDefault();
-    const point = keyboardAim;
+    const { geo, ...point } = keyboardAim;
     reset();
-    land(point, held);
+    land(point, held, geo);
   };
   keyboardButton.onblur = () => {
     if (keyboardAim) reset();
@@ -224,63 +257,83 @@ export function bindTurnButton(button, activate) {
 
 // Project a constant forward velocity and a gravity arc. With depth 1 at
 // the board, the screen-space interpolation weight is t / depth.
-export function flyDart(field, point, held, onContact, finalDart) {
+//
+// The path runs as a Web Animation of transform, so the compositor moves the
+// dart even when the main thread is late, and the clock starts on the first
+// frame that reaches the screen rather than at release. Each frame the main
+// thread only re-poses the four fins and barrel, and over the last quarter
+// moves the approach shadow, which stays empty (nothing to paint) until then.
+const samples = 24; // keyframes along the path, linear between: < 0.1 px from the curve
+export function flyDart(field, point, held, geo, onContact, finalDart) {
   if (motion.matches) return null;
   const dart = field.querySelector(".ready-dart");
-  const grip = dart.parentElement.getBoundingClientRect();
-  const board = field.querySelector("svg.board");
-  const plane = board.querySelector(".board-plane").getScreenCTM();
+  dart.closest(".throw-control").classList.add("held");
+  const { grip, plane, width } = geo;
   const target = new DOMPoint(point.x, point.y).matrixTransform(plane);
   const start = held || { ...rest, x: 0, y: 0, scale: 1 };
   const end = entryPose(point),
     pace = point.pace || 0;
   const f = tune.flight,
     c = tune.camera;
-  const width = board.getBoundingClientRect().width;
   const endX = target.x - (grip.left + grip.width / 2);
   const endY = target.y - grip.top;
   const endScale = (f.length * plane.a) / grip.height;
   const releaseDepth = endScale / start.scale;
   const arc = width * (c.arc - c.arcByPace * pace);
   const duration = f.duration - pace * f.byPace;
-  const shadow = field.querySelector(".approach-shadow");
-  shadow.innerHTML = approachShadow(point);
+  const path = [];
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples,
+      depth = mix(releaseDepth, 1, t),
+      q = t / depth;
+    const x = mix(start.x, endX, q),
+      y = mix(start.y, endY, q) - (arc * 4 * t * (1 - t)) / depth;
+    path.push({ transform: `translate(${x}px,${y}px) scale(${endScale / depth})` });
+  }
+  const flight = dart.animate(path, { duration, fill: "forwards", id: "flight" });
+  // The shadow's box is 200 board units about the impact, so a unit is 0.5% of it.
+  const shadow = field.querySelector(".approach");
+  const p = boardPosition(point);
+  shadow.style.left = (p.x + 111) / 4.22 + "%";
+  shadow.style.top = (p.y + 111) / 4.22 + "%";
   let raf, timer, resolve;
   const finished = new Promise((done) => {
     resolve = done;
   });
-  const began = performance.now();
-  function frame(now) {
-    const t = clamp((now - began) / duration, 0, 1);
-    const depth = mix(releaseDepth, 1, t);
-    const q = t / depth;
-    draw(dart, {
-      x: mix(start.x, endX, q),
-      y: mix(start.y, endY, q) - (arc * 4 * t * (1 - t)) / depth,
-      scale: endScale / depth,
+  function roll() {
+    const t = clamp((flight.currentTime || 0) / duration, 0, 1);
+    poseModel(dart.firstElementChild, {
       ax: mix(start.ax, end.ax, t),
       ay: mix(start.ay, end.ay, t),
       roll: mix(start.roll, end.roll, t),
     });
     const gap = 1 - t;
-    shadow.setAttribute("opacity", clamp(1 - gap / (1 - f.shadowStart), 0, 1));
-    shadow.setAttribute(
-      "transform",
-      `translate(${gap * f.approachX} ${gap * f.approachY})`,
-    );
-    if (t < 1) raf = requestAnimationFrame(frame);
-    else {
+    if (t >= f.shadowStart) {
+      if (!shadow.firstChild) shadow.innerHTML = approachShadow(point);
+      shadow.style.opacity = clamp(1 - gap / (1 - f.shadowStart), 0, 1);
+      shadow.style.transform = `translate(${gap * f.approachX * 0.5}%,${gap * f.approachY * 0.5}%)`;
+    }
+    if (t < 1) raf = requestAnimationFrame(roll);
+  }
+  roll();
+  flight.finished.then(
+    () => {
+      cancelAnimationFrame(raf);
       onContact();
       if (finalDart) timer = setTimeout(resolve, f.settleMs);
       else resolve();
-    }
-  }
-  frame(began);
+    },
+    () => {},
+  );
   return {
     finished,
+    // The landing replaces the flying dart and shows the dart's own shadow.
     cancel() {
       cancelAnimationFrame(raf);
       clearTimeout(timer);
+      flight.cancel();
+      shadow.textContent = "";
+      shadow.style.opacity = shadow.style.transform = "";
       resolve();
     },
   };

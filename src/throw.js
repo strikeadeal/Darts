@@ -51,9 +51,33 @@ export const tune = {
     shadowX: 0.24,
     shadowY: 0.34, // board-plane light displacement / dart length
   },
+  // Pickup. A stroke only starts on the dart: its painted outline at rest, grown
+  // by `pad` on every side and never smaller than `min` across (CSS px). iOS asks
+  // for 44 px; the painted dart alone is at least 40 px wide on the smallest screen.
+  grab: {
+    pad: 12,
+    min: 48,
+  },
 };
 
 export const clamp = (n, low, high) => Math.min(high, Math.max(low, n));
+
+// Does a touch at (x, y) pick up a dart painted inside `box` (left, top, width,
+// height)? With a second box (where the dart began a camera move this touch
+// skipped) it counts anywhere along the way between the two.
+export function onDart(x, y, box, seen) {
+  const g = tune.grab;
+  const left = Math.min(box.left, seen?.left ?? Infinity),
+    top = Math.min(box.top, seen?.top ?? Infinity);
+  const width = Math.max(box.left + box.width, seen ? seen.left + seen.width : -Infinity) - left,
+    height = Math.max(box.top + box.height, seen ? seen.top + seen.height : -Infinity) - top;
+  const halfW = Math.max(width + 2 * g.pad, g.min) / 2;
+  const halfH = Math.max(height + 2 * g.pad, g.min) / 2;
+  return (
+    Math.abs(x - left - width / 2) <= halfW &&
+    Math.abs(y - top - height / 2) <= halfH
+  );
+}
 const unit = (n) => clamp(n, -1, 1);
 const limit = (n) => clamp(n, -tune.input.limit, tune.input.limit);
 

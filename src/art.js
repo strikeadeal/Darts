@@ -143,10 +143,8 @@ function shadow(pose) {
   const angle = (Math.atan2(-ax, ay) * 180) / Math.PI;
   return `<path transform="scale(${factor}) rotate(${angle}) scale(1 ${Math.hypot(ax, ay)})" d="M0 0 3 18 4 45 2 74 18 62 19 92 1 125 -14 99 -17 65 -2 75 -3 45 -3 18Z" fill="#080909" opacity=".45"/>`;
 }
-export function approachShadow(hit) {
-  const p = boardPosition(hit);
-  return `<g transform="translate(${p.x} ${p.y})">${shadow(entryPose(hit))}</g>`;
-}
+// Drawn about the impact point; the flight slides it in on its own small layer.
+export const approachShadow = (hit) => shadow(entryPose(hit));
 
 function boardFace() {
   const beds = [],
@@ -194,23 +192,25 @@ function boardFace() {
 }
 const face = boardFace();
 
-export function board(hits, impactClass = "") {
-  const darts = hits
-    .map((hit, i) => {
-      const effect = i === hits.length - 1 ? impactClass : "";
-      const p = boardPosition(hit),
-        pose = entryPose(hit);
-      return `<g class="landed ${effect}" transform="translate(${p.x} ${p.y})">
+export function landed(hit, effect = "") {
+  const p = boardPosition(hit),
+    pose = entryPose(hit);
+  return `<g class="landed ${effect}" transform="translate(${p.x} ${p.y})">
       <circle class="impact-ring" r="13" fill="none" stroke-width="2"/>
       ${shadow(pose)}
       <g class="embedded" style="--settle:${tune.flight.settleMs}ms;--flex:${tune.flight.flex}deg;--rebound:${-tune.flight.flex / 2}deg">
         <g transform="scale(${tune.flight.length / modelLength})">${model(pose)}</g>
       </g></g>`;
-    })
+}
+
+export function board(hits, impactClass = "") {
+  const darts = hits
+    .map((hit, i) => landed(hit, i === hits.length - 1 ? impactClass : ""))
     .join("");
   return `<svg class="board" viewBox="-211 -211 422 422" role="img" aria-label="Dartboard, twenty at the top">
     <g class="board-plane" transform="matrix(1 0 ${tune.camera.skew} ${tune.camera.faceHeight} 0 0)">${face}</g></svg>
-    <svg class="board-objects" viewBox="-211 -211 422 422" aria-hidden="true"><g class="approach-shadow" opacity="0"></g>${darts}
+    <svg class="approach" viewBox="-100 -100 200 200" aria-hidden="true"></svg>
+    <svg class="board-objects" viewBox="-211 -211 422 422" aria-hidden="true">${darts}
     <g id="sight" visibility="hidden" fill="none" stroke-width="2"><circle r="10" stroke="#151515" stroke-width="5"/><circle r="10" stroke="#fff"/><circle r="2" fill="#ff5732"/></g>
   </svg>`;
 }

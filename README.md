@@ -5,7 +5,7 @@
 ## Play
 
 1. Pick **Solo run** or **Local duel**.
-2. Put your finger on the dart beneath the board, or start anywhere inside the playfield.
+2. Put your finger on the dart beneath the board. A touch anywhere else never throws: the dart pulses and the prompt says where to start.
 3. Swipe upward at least a third of the board’s width, then lift. Angle the swipe to send the dart left or right. Start with a straight stroke just over half a board wide. A longer stroke or quicker finish carries higher. Ease off for a lower hit, or flick sideways to trim your line. Short or downward strokes cost no dart.
 
 Each player throws three darts per visit and gets three visits. The thin inner ring scores treble and the outer ring double. The outer bull scores 25, the centre scores 50, and a miss uses one dart for zero points. The maximum is 540. Duels alternate visits and equal totals draw.
@@ -40,7 +40,7 @@ Push to `main`. The Pages workflow runs the scoring tests, builds `dist/`, uploa
 ## Code and verification
 
 - `src/game.js` contains board scoring, match progression and saved-match validation. `tests/game.test.js` exercises those rules with Node's built-in test runner.
-- `src/throw.js` holds the release model and the tuning values for gesture sensitivity, camera, flight, grip and impact.
+- `src/throw.js` holds the release model and the tuning values for gesture sensitivity, camera, flight, grip and impact. `tune.grab` sets the touch target around the dart.
 - `src/input.js` owns pointer capture, keyboard input, frame-timed presentation and cancellation. `src/art.js` draws the playable board from the scoring constants.
 - `style.css` opens with **Scene tuning**: the room's camera shots, depth, lamp and transition timings, with the landscape and short-portrait overrides beneath. `src/app.js` moves one persistent room between those shots. The play shot is untransformed, so the throw's own `tune` is unaffected.
 - `scripts/build.mjs` hashes the shipped files and worker template, then emits the scoped precache worker. Every font and image is local. The OFL font licenses are in `assets/fonts/`.
@@ -52,4 +52,4 @@ Next up would be personal-best round splits and a 301 checkout mode. This releas
 
 ### Verification limits
 
-The throw and the 3D room were checked under `/Darts/` in Chromium, WebKit and the iPhone 17 simulator, in Safari and as the installed app. Checks covered full solo and duel matches, touch, keyboard and reduced motion, saved-point alignment, offline reload, service-worker updates and a safe-area layout audit at nine viewport sizes. Physical iPhone touch feel, the room's compositing cost and sustained frame rate on an SE-class phone, and sound with the silent switch need hardware testing. [Design decisions](DECISIONS.md) records the simulator strokes, frame timings and viewport results.
+The dart-only grab and the compositor-driven flight were profiled and played under `/Darts/` in Chromium and WebKit (`scripts/check/` holds the profiler and match runner; they need Playwright and are not part of the build). Earlier, the throw and the 3D room were checked in Chromium, WebKit and the iPhone 17 simulator, in Safari and as the installed app. Checks covered full solo and duel matches, touch, keyboard and reduced motion, saved-point alignment, offline reload, service-worker updates and a safe-area layout audit at nine viewport sizes. Physical iPhone touch feel, the room's compositing cost and sustained frame rate on an SE-class phone, and sound with the silent switch need hardware testing. [Design decisions](DECISIONS.md) records the simulator strokes, frame timings and viewport results.
