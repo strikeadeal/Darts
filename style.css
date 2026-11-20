@@ -51,7 +51,7 @@
   --cam-out: 480ms; /* step back between visits or to the lobby */
   --cam-final: 900ms; /* pull back for the results */
   --cam-ease: cubic-bezier(0.55, 0, 0.15, 1);
-  --hold: 420ms; /* stay on the last dart of a visit before stepping back */
+  --hold: 420ms; /* stay on the last dart of a visit before stepping back (read by src/app.js) */
   --ui-in: 280ms;
   --ui-out: 160ms;
   --callout: 1150ms; /* score pop on the board */
@@ -220,7 +220,6 @@ p {
     calc(var(--b) * var(--step-z) * -1)
   );
   transition-duration: var(--cam-out);
-  transition-delay: var(--hold);
 }
 .scene[data-shot="final"] .cam {
   transform: translate3d(
@@ -229,7 +228,6 @@ p {
     calc(var(--b) * var(--final-z) * -1)
   );
   transition-duration: var(--cam-final);
-  transition-delay: var(--hold);
 }
 /* [data-shot="oche"]: no transform. */
 
@@ -394,10 +392,10 @@ p {
   animation: flare 620ms ease-out;
 }
 .scene.moment-ton .flare {
-  animation: flare 1100ms ease-out var(--hold);
+  animation: flare 1100ms ease-out;
 }
 .scene.moment-win .neon > * {
-  animation: neon-on 1.1s steps(1) var(--hold) both;
+  animation: neon-on 1.1s steps(1) both;
 }
 @keyframes lamp-on {
   from {
@@ -448,14 +446,40 @@ p {
   left: calc(var(--cx) - var(--b) / 2);
   top: calc(var(--cy) - var(--b) / 2);
 }
+/* The board's cast shadow, painted once as a soft-edged ellipse under its rim
+   (r 202 of 422 units, face foreshortened to 0.95). A CSS drop-shadow filter
+   here was re-rendered whenever anything painted over the board: every flight
+   frame and every landing. */
+.board-wrap::before {
+  content: "";
+  position: absolute;
+  left: calc(2.13% - 4px);
+  right: calc(2.13% - 4px);
+  top: calc(4.53% - 4px);
+  bottom: calc(2.73% - 4px);
+  translate: var(--shade);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, #060808bd calc(100% - 8px), #06080800);
+}
+/* Its own layer: painted once, never repainted by a dart, shadow or callout. */
 .board {
+  will-change: transform;
+  position: relative; /* paint above the shadow */
   display: block;
   width: 100%;
   height: 100%;
   font:
     700 20px/1 system-ui,
     sans-serif;
-  filter: drop-shadow(var(--shade) 4px #060808bd);
+}
+/* The approach shadow: 200 board units about the impact, moved by the flight. */
+.approach {
+  position: absolute;
+  width: 47.39%;
+  height: 47.39%;
+  overflow: visible;
+  opacity: 0;
+  pointer-events: none;
 }
 .board-objects {
   position: absolute;
@@ -643,7 +667,15 @@ p {
   overflow: visible;
   transform-origin: 50% 0;
   pointer-events: none;
+}
+/* The resting dart's soft shadow. Dropped once it is picked up or thrown, so a
+   moving dart is never re-filtered per frame. */
+.throw-control:not(.held) .ready-dart {
   filter: drop-shadow(0 6px 8px #0009);
+}
+/* In hand: the prompt steps back out of the stroke's way. */
+.throw-control.held :is(b, small) {
+  opacity: 0.3;
 }
 .throw-control b {
   font: var(--race);
@@ -881,7 +913,6 @@ p {
   --accent: var(--blue);
 }
 .handoff {
-  animation-delay: var(--hold) !important;
   text-align: center;
 }
 .handoff h2 {
