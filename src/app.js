@@ -1,4 +1,15 @@
-import { freshMatch, decodeMatch, status, advance, scoreAt } from "./game.js";
+import {
+  freshMatch,
+  status,
+  advance,
+  scoreAt,
+  checkout,
+  bustReasons,
+  x01,
+  readSaves,
+  writeSaves,
+  saveKeys,
+} from "./game.js";
 import { icon, board, landed, readyDart } from "./art.js";
 import { bindThrows, bindTurnButton, flyDart } from "./input.js";
 import { boardPosition } from "./throw.js";
@@ -9,33 +20,36 @@ const $ = (s) => document.querySelector(s);
 const scene = $("#scene"),
   stage = $("#stage"),
   panel = $("#panel");
-const key = "dartshift.save.v1";
-const resumeKey = "dartshift.resume"; // session-only: set just before an update reloads
-let stored = {};
-try {
-  stored = JSON.parse(localStorage.getItem(key)) || {};
-} catch {
-  /* Start clean. */
-}
-let match = decodeMatch(stored.match);
-let best =
-  Number.isInteger(stored.best) && stored.best >= 0 && stored.best <= 540
-    ? stored.best
-    : null;
-let muted = stored.muted === true;
-let acknowledged =
-  Number.isInteger(stored.acknowledged) &&
-  stored.acknowledged === match?.hits.length
-    ? stored.acknowledged
-    : -1;
+// "1" (Nine Dart Rush, as before) or "301". Session-only: set just before an update reloads.
+const resumeKey = "dartshift.resume";
+const read = (key) => {
+  try {
+    return JSON.parse(localStorage.getItem(key));
+  } catch {
+    return null; // Start clean.
+  }
+};
+// Each game keeps its own match, record and acknowledged visit (src/game.js
+// readSaves). `game` is the one on screen; match, best and acknowledged are its
+// copies, put back by use() and save().
+const saves = readSaves(read(saveKeys.rush), read(saveKeys.x01));
+let game = saves.lobby;
+let { match, best, acknowledged } = saves[game];
+let muted = saves.muted;
 let freshBest = false;
 let cancelAim = () => {};
+function use(next) {
+  Object.assign(saves[game], { match, best, acknowledged });
+  game = saves.lobby = next;
+  ({ match, best, acknowledged } = saves[game]);
+  sign();
+}
 function save() {
+  Object.assign(saves[game], { match, best, acknowledged });
+  saves.muted = muted;
   try {
-    localStorage.setItem(
-      key,
-      JSON.stringify({ match, best, muted, acknowledged }),
-    );
+    for (const [key, value] of Object.entries(writeSaves(saves)))
+      localStorage.setItem(key, JSON.stringify(value));
   } catch {
     $("#storage-note").hidden = false;
   }
@@ -228,6 +242,53 @@ function render(shot, world, overlay = "", keep = null) {
 }
 
 const playerName = (i) => "Player " + (i + 1);
+const games = {
+  rush: {
+    name: "Nine Dart Rush",
+    neon: ["NINE DART", "RUSH"],
+    tagline: "Three rounds. Nine darts. Run up the score.",
+    solo: "Chase your personal best.",
+    duel: "Face a friend. Pass the phone.",
+    rounds: 3,
+    bestLabel: "Personal best",
+  },
+  301: {
+    name: "301",
+    neon: ["DOUBLE OUT", "301"],
+    tagline: "Count down from 301. Finish on a double.",
+    solo: "Fewest darts to zero.",
+    duel: "First to zero on a double wins.",
+    rounds: x01.rounds,
+    bestLabel: "Fewest darts",
+  },
+};
+const is301 = () => game === "301";
+const bestText = () => (best === null ? "—" : best + (is301() ? " darts" : ""));
+// The neon sign names the game (index.html holds Nine Dart Rush for first paint).
+function sign() {
+  const [top, big] = games[game].neon;
+  $(".neon span").textContent = top;
+  $(".neon b").textContent = big;
+}
+sign();
+// "T20" → "treble 20" for screen readers.
+const spoken = (route) =>
+  route
+    .map((l) =>
+      l === "Bull"
+        ? "bull"
+        : l === "25"
+          ? "outer bull"
+          : ({ T: "treble ", D: "double " }[l[0]] || "single ") + l.replace(/^[TD]/, ""),
+    )
+    .join(", ");
+// 301: what's left for the player about to throw, and a checkout if one exists.
+function standing(left, darts = 3) {
+  const route = checkout(left, darts);
+  return left + " left." + (route ? " Checkout: " + spoken(route) + "." : "");
+}
+// The last dart's outcome in 301: "bust", "out" or "".
+const noteOf = (v) => (is301() && v?.closed ? (v.bust ? "bust" : v.out ? "out" : "") : "");
 const visitTotal = (hits) =>
   hits.reduce((v, h) => v + scoreAt(h.x, h.y).points, 0);
 const lobbyDarts = [
@@ -236,31 +297,60 @@ const lobbyDarts = [
   { x: 6, y: -128, pace: 0, line: 0.5 },
 ];
 
-function home() {
-  const modeButton = (mode, title, detail) => {
-    const resume = match?.mode === mode && !status(match).complete;
+function lobbyParts() {
+  const g = games[game];
+  const modeButton = (mode, title) => {
+    const s = match?.mode === mode && !status(match).complete && status(match);
+    const left = s && is301() ? " · " + s.totals.join("–") + (mode === "solo" ? " left" : "") : "";
     return `<button class="mode ${mode}" data-mode="${mode}">
       <span class="mode-mark">${icon(mode)}</span>
-      <span class="mode-copy"><strong>${resume ? "Resume " + title : title}</strong>
-      <small>${resume ? "Round " + status(match).round + " of 3 · Saved on this device" : detail}</small></span>
+      <span class="mode-copy"><strong>${s ? "Resume " + title : title}</strong>
+      <small>${s ? "Round " + s.round + " of " + g.rounds + left + (is301() ? "" : " · Saved on this device") : g[mode]}</small></span>
       ${icon("arrow")}</button>`;
   };
-  render(
-    "wide",
-    `<div class="plate best-plate"><span class="plate-label">Personal best</span><b class="plate-score">${best ?? "—"}</b></div>
-     <div class="board-wrap">${board(lobbyDarts)}</div>`,
-    `<section class="lobby" aria-labelledby="lobby-title">
-       <h1 id="lobby-title" class="sr">Dartshift · Nine Dart Rush</h1>
-       <p class="tagline">Three rounds. Nine darts. Run up the score.</p>
+  const pick = (id, name) =>
+    `<button data-game="${id}" aria-pressed="${game === id}">${name}</button>`;
+  return {
+    plate: `<div class="plate best-plate"><span class="plate-label">${g.bestLabel}</span><b class="plate-score">${bestText()}</b></div>`,
+    panel: `<section class="lobby" aria-labelledby="lobby-title">
+       <h1 id="lobby-title" class="sr">Dartshift · ${g.name}</h1>
+       <div class="games" role="group" aria-label="Game">${pick("rush", "Nine Dart Rush")}${pick("301", "301")}</div>
+       <p class="tagline">${g.tagline}</p>
        <div class="modes">
-         ${modeButton("solo", "Solo run", "Chase your personal best.")}
-         ${modeButton("duel", "Local duel", "Face a friend. Pass the phone.")}
+         ${modeButton("solo", "Solo run")}
+         ${modeButton("duel", "Local duel")}
        </div>
      </section>`,
-  );
+  };
+}
+function home() {
+  const { plate, panel: lobby } = lobbyParts();
+  render("wide", plate + `<div class="board-wrap">${board(lobbyDarts)}</div>`, lobby);
+  bindLobby();
+}
+function bindLobby() {
   panel
     .querySelectorAll(".lobby [data-mode]")
     .forEach((b) => (b.onclick = () => selectMode(b.dataset.mode)));
+  panel
+    .querySelectorAll(".lobby [data-game]")
+    .forEach((b) => (b.onclick = () => pickGame(b.dataset.game)));
+}
+// Switching game repaints the lobby in place: the board and camera stay, the
+// buttons keep focus, and the neon relights with the new name.
+function pickGame(next) {
+  if (next === game) return;
+  wakeAudio();
+  use(next);
+  save();
+  const { plate, panel: lobby } = lobbyParts();
+  const t = document.createElement("template");
+  t.innerHTML = plate + lobby;
+  morph(stage.querySelector(".best-plate"), t.content.children[0]);
+  morph(panel.querySelector(":scope > .lobby:not(.ghost)"), t.content.children[1]);
+  bindLobby();
+  moment("win");
+  say(games[game].name + ". " + games[game].tagline);
 }
 function sheet(title, body, bind) {
   cancelAim();
@@ -279,7 +369,7 @@ function sheet(title, body, bind) {
 function help() {
   sheet(
     "How to play",
-    '<ol class="steps"><li><strong>Pick up the dart.</strong><small>Put your finger on the dart beneath the board. Swipe up at least a third of the board’s width and lift.</small></li><li><strong>Throw along your line.</strong><small>Angle left or right. A longer stroke reaches higher. Start with a straight stroke just over half a board wide.</small></li><li><strong>Finish with a flick.</strong><small>A quick finish carries higher on a flatter arc. Ease off for a lower hit. A sideways flick trims your line.</small></li></ol><p class="body-copy">Three darts per visit, three visits each. The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50. Highest total wins.</p><button class="primary full" id="okay">Got it</button>',
+    '<ol class="steps"><li><strong>Pick up the dart.</strong><small>Put your finger on the dart beneath the board. Swipe up at least a third of the board’s width and lift.</small></li><li><strong>Throw along your line.</strong><small>Angle left or right. A longer stroke reaches higher. Start with a straight stroke just over half a board wide.</small></li><li><strong>Finish with a flick.</strong><small>A quick finish carries higher on a flatter arc. Ease off for a lower hit. A sideways flick trims your line.</small></li></ol><p class="body-copy">The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50.</p><p class="body-copy"><strong>Nine Dart Rush.</strong> Three darts per visit, three visits each. Highest total wins.</p><p class="body-copy"><strong>301.</strong> Count down from 301 to exactly zero. The last dart must be a double or the bull. Going below zero, leaving 1 or reaching zero any other way is a bust: the visit ends and your score goes back. Empty dart slots suggest a checkout. Ten rounds each; if nobody finishes, the lowest score wins.</p><button class="primary full" id="okay">Got it</button>',
     () => {
       $("#okay").onclick = () => $("#modal").close();
       $("#sheet-title").onclick = probeTap;
@@ -313,13 +403,14 @@ try {
   /* No readout. */
 }
 function start(mode) {
-  match = freshMatch(mode);
+  match = freshMatch(mode, game);
   acknowledged = -1;
   freshBest = false;
   save();
   play();
   say(
-    "Round one. Touch the dart and swipe up at least a third of the board’s width to throw. A longer stroke or quicker finish lands higher.",
+    (is301() ? "301, double out. " : "") +
+      "Round one. Touch the dart and swipe up at least a third of the board’s width to throw. A longer stroke or quicker finish lands higher.",
   );
 }
 function selectMode(mode) {
@@ -332,6 +423,7 @@ function selectMode(mode) {
     sheet(
       "Switch modes?",
       '<p class="body-copy">Starting a new match will replace your saved ' +
+        (is301() ? "301 " : "") +
         (match.mode === "solo" ? "solo run" : "duel") +
         '.</p><div class="stack"><button class="primary" id="switch">Start new match</button><button class="secondary" id="stay">Keep current match</button></div>',
       () => {
@@ -346,29 +438,42 @@ function selectMode(mode) {
 }
 
 // The scoreboard is mounted on the wall, so it shares the room's light and camera.
-function plate(s, shown, round, visit, closed) {
+// In 301 the big number is what's left, and the empty slots show a checkout.
+function plate(s, shown, round, visit, closed, bust = null) {
   const duel = match.mode === "duel";
+  const route = is301() && !closed ? checkout(s.totals[shown], 3 - visit.length) : null;
   const slots = [0, 1, 2]
     .map((i) => {
       const h = visit[i];
-      if (h) return `<i class="slot thrown">${scoreAt(h.x, h.y).points}</i>`;
-      return `<i class="slot${!closed && i === visit.length ? " next" : ""}"></i>`;
+      if (h) return `<i class="slot thrown${bust ? " void" : ""}">${scoreAt(h.x, h.y).points}</i>`;
+      const next = !closed && i === visit.length ? " next" : "";
+      const out = route?.[i - visit.length];
+      return out ? `<i class="slot out${next}">${out}</i>` : `<i class="slot${next}"></i>`;
     })
     .join("");
+  const where = closed
+    ? bust
+      ? "Bust"
+      : "Visit complete"
+    : "Dart " + s.dart + " of 3" + (route ? ". Checkout " + spoken(route) : "");
   return `<div class="plate${duel ? " p" + (shown + 1) : ""}">
-    <span class="plate-label who">${duel ? playerName(shown) : "Score"}</span>
-    <span class="plate-label side">${duel ? playerName(1 - shown) + " · " + s.totals[1 - shown] : "Best " + (best ?? "—")}</span>
+    <span class="plate-label who">${duel ? playerName(shown) : is301() ? "Remaining" : "Score"}</span>
+    <span class="plate-label side">${duel ? playerName(1 - shown) + " · " + s.totals[1 - shown] : "Best " + bestText()}</span>
     <b class="plate-score">${s.totals[shown]}</b>
-    <span class="visit"><span class="plate-label">Round ${round} / 3</span>
-      <span class="slots" role="img" aria-label="${closed ? "Visit complete" : "Dart " + s.dart + " of 3"}">${slots}</span></span>
+    <span class="visit"><span class="plate-label">Round ${round} / ${games[game].rounds}</span>
+      <span class="slots" role="img" aria-label="${where}">${slots}</span></span>
   </div>`;
 }
 // Score pop at the impact point, on the board itself.
-function callout(hit) {
+// `note` is the 301 outcome of this dart: "bust" or "out" (game shot).
+function callout(hit, note = "") {
   const p = boardPosition(hit),
     h = scoreAt(hit.x, hit.y);
-  const tier = h.points >= 40 ? "premium" : h.points ? "" : "miss";
-  return `<div class="callout ${tier}" style="left:${((p.x + 211) / 4.22).toFixed(2)}%;top:${((p.y + 211) / 4.22).toFixed(2)}%" aria-hidden="true">${h.points ? "<b>+" + h.points + "</b>" : ""}<span>${h.points === 50 ? "Bull" : h.label}</span></div>`;
+  const tier =
+    note === "bust" ? "miss bust" : h.points >= 40 || note === "out" ? "premium" : h.points ? "" : "miss";
+  const top = note === "bust" ? "<b>Bust</b>" : h.points ? "<b>+" + h.points + "</b>" : "";
+  const name = note === "out" ? "Game shot" : h.points === 50 ? "Bull" : h.label;
+  return `<div class="callout ${tier}" style="left:${((p.x + 211) / 4.22).toFixed(2)}%;top:${((p.y + 211) / 4.22).toFixed(2)}%" aria-hidden="true">${top}<span>${name}</span></div>`;
 }
 // Impact adds the new dart to the board already on screen instead of rebuilding
 // the stage at the moment the eye is on the landing (see showLanding). Returns
@@ -386,12 +491,12 @@ function embed(hit, earlier, impactClass) {
   return objects.parentElement;
 }
 // The frame after: the callout joins the board that holds the new dart.
-function landing(hits, impactClass) {
+function landing(hits, impactClass, note) {
   const wrap = impactClass && embedded?.isConnected ? embedded : null;
   embedded = null;
   if (!wrap) return null;
   wrap.querySelector(".callout")?.remove();
-  wrap.insertAdjacentHTML("beforeend", callout(hits.at(-1)));
+  wrap.insertAdjacentHTML("beforeend", callout(hits.at(-1), note));
   return wrap;
 }
 // What a darts caller would shout for a three-dart visit.
@@ -414,28 +519,38 @@ function play(impactClass = "", leaving = false) {
     return;
   }
   const duel = match.mode === "duel";
-  const between = n > 0 && n % 3 === 0 && acknowledged !== n;
-  const shown = between && duel ? 1 - s.player : s.player;
-  const visit = match.hits.slice(n - (between ? 3 : n % 3));
-  const round = between ? Math.floor((n - 1) / (duel ? 6 : 3)) + 1 : s.round;
+  // A visit ends after three darts, or in 301 on a bust.
+  const last = s.visits.at(-1);
+  const between = !!last?.closed && acknowledged !== n;
+  const shown = between ? last.player : s.player;
+  const visit = between || !last?.closed ? last?.hits || [] : [];
+  const round = between ? last.round : s.round;
   // After a handoff the last visit's darts stay just long enough to be pulled.
-  const onBoard = leaving ? match.hits.slice(-3) : visit;
+  const onBoard = leaving ? last.hits : visit;
+  const note = noteOf(last);
   let card = "",
     total = 0;
   if (between) {
-    total = visitTotal(visit);
-    const tier = total >= 100 ? " big" : total ? "" : " flat";
+    total = last.scored;
+    const bust = last.bust;
+    const tier = bust ? " flat bust" : total >= 100 ? " big" : total ? "" : " flat";
+    const heading = bust
+      ? `<span class="visit-total">Bust</span><span class="caller">${bustReasons[bust]} · back to ${last.start}</span>`
+      : `<span class="visit-total">${total}</span><span class="caller">${caller(total)}</span>`;
+    const mine = is301()
+      ? `<span>Left · ${s.totals[0]}</span><span>Darts · ${n}</span>`
+      : `<span>Total · ${s.totals[0]}</span><span>Best · ${bestText()}</span>`;
     card = `<section class="card handoff${tier}${duel ? " p" + (s.player + 1) : ""}" aria-labelledby="visit-title">
       <p class="eyelabel">${duel ? playerName(shown) + " · " : ""}Visit complete</p>
-      <h2 id="visit-title"><span class="visit-total">${total}</span><span class="caller">${caller(total)}</span></h2>
-      <p class="standings">${duel ? `<span class="p1">Player 1 · ${s.totals[0]}</span><span class="p2">Player 2 · ${s.totals[1]}</span>` : `<span>Total · ${s.totals[0]}</span><span>Best · ${best ?? "—"}</span>`}</p>
+      <h2 id="visit-title">${heading}</h2>
+      <p class="standings">${duel ? `<span class="p1">Player 1 · ${s.totals[0]}</span><span class="p2">Player 2 · ${s.totals[1]}</span>` : mine}</p>
       <button class="primary big" id="next">${duel ? "Pass to " + playerName(s.player) : "Start round " + s.round}${icon("arrow")}</button>
     </section>`;
   }
-  const keep = landing(onBoard, impactClass);
+  const keep = landing(onBoard, impactClass, note);
   const world = `<div class="field gameplay">
-       ${plate(s, shown, round, visit, between)}
-       <div class="board-wrap">${keep ? "" : board(onBoard, impactClass) + (impactClass && visit.length ? callout(visit.at(-1)) : "")}</div>
+       ${plate(s, shown, round, visit, between, between && last.bust)}
+       <div class="board-wrap">${keep ? "" : board(onBoard, impactClass) + (impactClass && visit.length ? callout(visit.at(-1), note) : "")}</div>
        ${between ? "" : throwControl}
      </div>`;
   if (between) {
@@ -447,7 +562,11 @@ function play(impactClass = "", leaving = false) {
         save();
         play("", true);
         say(
-          "Round " + s.round + ", " + (duel ? playerName(s.player) : "your turn"),
+          "Round " +
+            s.round +
+            ", " +
+            (duel ? playerName(s.player) : "your turn") +
+            (is301() ? ". " + standing(s.totals[s.player]) : ""),
         );
       });
     };
@@ -488,17 +607,25 @@ function play(impactClass = "", leaving = false) {
 function land(point, held, geo) {
   const hit = scoreAt(point.x, point.y);
   match = advance(match, point);
-  const s = status(match);
+  const s = status(match),
+    v = s.visits.at(-1),
+    note = noteOf(v),
+    darts = match.hits.length;
   if (s.complete && match.mode === "solo") {
-    freshBest = best === null || s.totals[0] > best;
-    best = Math.max(best ?? 0, s.totals[0]);
+    if (!is301()) {
+      freshBest = best === null || s.totals[0] > best;
+      best = Math.max(best ?? 0, s.totals[0]);
+    } else if (s.out) {
+      freshBest = best === null || darts < best;
+      best = Math.min(best ?? darts, darts);
+    }
   }
   save();
   const field = stage.querySelector(".field");
   field.setAttribute("aria-busy", "true");
   let sounded = false;
   function contact() {
-    if (!sounded && !muted) impact(hit.points);
+    if (!sounded && !muted) impact(note === "bust" ? 0 : hit.points);
     sounded = true;
   }
   const flight = flyDart(field, point, held, geo, contact, s.complete);
@@ -511,65 +638,114 @@ function land(point, held, geo) {
     cancelAim = () => {};
     flight?.cancel();
     contact();
-    const effect = hit.points >= 40 ? "impact premium" : "impact";
-    embedded = embed(match.hits.at(-1), (match.hits.length - 1) % 3, effect);
+    const big = hit.points >= 40 || note === "out";
+    const effect = big ? "impact premium" : "impact";
+    embedded = embed(match.hits.at(-1), v.hits.length - 1, effect);
     for (const a of field.querySelector(".throw-control")?.getAnimations() || []) {
       a.pause();
       a.currentTime = 0;
     }
     say(
-      hit.label +
-        ", " +
-        hit.points +
-        " points." +
-        (s.complete ? " Match complete." : ""),
+      !is301()
+        ? hit.label + ", " + hit.points + " points." + (s.complete ? " Match complete." : "")
+        : note === "bust"
+          ? `${hit.label}. Bust, ${bustReasons[v.bust].toLowerCase()}. Back to ${v.start}.`
+          : `${hit.label}, ${hit.points} points. ` +
+            (note === "out"
+              ? "Game shot!"
+              : v.closed
+                ? s.totals[v.player] + " left."
+                : standing(s.totals[v.player], 3 - v.hits.length)) +
+            (s.complete ? " " + verdict(s) + "." : ""),
     );
     defer(() => {
       play(effect);
-      if (hit.points >= 40) moment("flare");
+      if (big) moment("flare");
     });
   }
   cancelAim = showLanding;
   if (flight) flight.finished.then(showLanding, showLanding);
   else showLanding();
 }
+// The 301 result in words: the results title and the final announcement.
+function verdict(s) {
+  if (match.mode === "solo") return s.out ? "Checked out" : "Out of rounds";
+  return s.winner === null ? "Match drawn" : playerName(s.winner) + " wins";
+}
 function finish(impactClass = "") {
   const s = status(match),
     { totals } = s,
     duel = match.mode === "duel";
-  const title = duel
-    ? totals[0] === totals[1]
-      ? "Match drawn"
-      : playerName(totals[0] > totals[1] ? 0 : 1) + " wins"
-    : "Run complete";
-  const visit = match.hits.slice(-3);
+  const end = s.visits.at(-1),
+    visit = end.hits,
+    note = noteOf(end);
   const last = match.hits.at(-1),
     hit = scoreAt(last.x, last.y);
-  const rounds = [0, 1, 2]
-    .map((r) => {
-      const cells = totals
-        .map((_, p) => {
-          const offset = (r * totals.length + p) * 3;
-          return "<td>" + visitTotal(match.hits.slice(offset, offset + 3)) + "</td>";
-        })
-        .join("");
-      return "<tr><td>Round " + (r + 1) + "</td>" + cells + "</tr>";
-    })
-    .join("");
-  const note = duel
-    ? "Final dart · " + hit.label + " (+" + hit.points + ")"
-    : freshBest
-      ? "New personal best"
-      : "Personal best · " + best;
-  const keep = landing(visit, impactClass);
-  const world = `<div class="field">${plate(s, totals.length - 1, 3, visit, true)}
-       <div class="board-wrap">${keep ? "" : board(visit, impactClass) + (impactClass ? callout(last) : "")}</div></div>`;
+  let title, score, line, table;
+  if (!is301()) {
+    title = duel
+      ? totals[0] === totals[1]
+        ? "Match drawn"
+        : playerName(totals[0] > totals[1] ? 0 : 1) + " wins"
+      : "Run complete";
+    const rounds = [0, 1, 2]
+      .map((r) => {
+        const cells = totals
+          .map((_, p) => {
+            const offset = (r * totals.length + p) * 3;
+            return "<td>" + visitTotal(match.hits.slice(offset, offset + 3)) + "</td>";
+          })
+          .join("");
+        return "<tr><td>Round " + (r + 1) + "</td>" + cells + "</tr>";
+      })
+      .join("");
+    score = `${totals.map((t, i) => `<span class="${duel ? "p" + (i + 1) : ""}">${t}</span>`).join("<i>–</i>")}<small>PTS</small>`;
+    line = duel
+      ? "Final dart · " + hit.label + " (+" + hit.points + ")"
+      : freshBest
+        ? "New personal best"
+        : "Personal best · " + best;
+    table = `<thead><tr><th>Visit</th>${totals.map((_, i) => "<th>" + (duel ? playerName(i) : "Points") + "</th>").join("")}</tr></thead><tbody>${rounds}</tbody>`;
+  } else {
+    title = verdict(s);
+    const darts = match.hits.length;
+    score =
+      !duel && s.out
+        ? `<span>${darts}</span><small>DARTS</small>`
+        : `${totals.map((t, i) => `<span class="${duel ? "p" + (i + 1) : ""}">${t}</span>`).join("<i>–</i>")}<small>LEFT</small>`;
+    line = s.out
+      ? duel
+        ? "Game shot · " + hit.label
+        : freshBest
+          ? "New personal best"
+          : "Personal best · " + bestText()
+      : duel
+        ? x01.rounds + " rounds up · " + (s.winner === null ? "level on " + totals[0] : "lowest score wins")
+        : "Check out within " + x01.rounds + " rounds to set a best";
+    const stats = totals.map((_, p) => {
+      const mine = s.visits.filter((v) => v.player === p);
+      const thrown = mine.reduce((t, v) => t + v.hits.length, 0),
+        scored = mine.reduce((t, v) => t + v.scored, 0);
+      return {
+        darts: thrown,
+        average: thrown ? ((scored / thrown) * 3).toFixed(1) : "0.0",
+        top: Math.max(0, ...mine.map((v) => v.scored)),
+      };
+    });
+    const row = (name, key) =>
+      "<tr><td>" + name + "</td>" + stats.map((x) => "<td>" + x[key] + "</td>").join("") + "</tr>";
+    const head = duel ? `<thead><tr><th></th>${totals.map((_, i) => "<th>" + playerName(i) + "</th>").join("")}</tr></thead>` : "";
+    table = `${head}<tbody>${row("Darts", "darts")}${row("3-dart average", "average")}${row("Best visit", "top")}</tbody>`;
+  }
+  const keep = landing(visit, impactClass, note);
+  const world = `<div class="field">${plate(s, end.player, end.round, visit, true, end.bust)}
+       <div class="board-wrap">${keep ? "" : board(visit, impactClass) + (impactClass ? callout(last, note) : "")}</div></div>`;
   const results = `<section class="card results${freshBest && !duel ? " record" : ""}" aria-labelledby="result-title">
-      <p class="eyelabel">${duel ? "Local duel" : "Solo run"}</p>
+      <p class="eyelabel">${is301() ? "301 · " : ""}${duel ? "Local duel" : "Solo run"}</p>
       <h1 id="result-title">${title}</h1>
-      <div class="result-score">${totals.map((t, i) => `<span class="${duel ? "p" + (i + 1) : ""}">${t}</span>`).join("<i>–</i>")}<small>PTS</small></div>
-      <p class="note">${note}</p>
-      <table class="results-table"><thead><tr><th>Visit</th>${totals.map((_, i) => "<th>" + (duel ? playerName(i) : "Points") + "</th>").join("")}</tr></thead><tbody>${rounds}</tbody></table>
+      <div class="result-score">${score}</div>
+      <p class="note">${line}</p>
+      <table class="results-table">${table}</table>
       <div class="actions"><button class="primary" id="again">Play again ${icon("arrow")}</button><button class="secondary" id="lobby">Modes</button></div>
     </section>`;
   const show = () => {
@@ -605,13 +781,14 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // An update reload returns straight to the match it interrupted.
-let resuming = false;
+let resuming = null;
 try {
-  resuming = sessionStorage.getItem(resumeKey) === "1";
+  resuming = { 1: "rush", 301: "301" }[sessionStorage.getItem(resumeKey)];
   sessionStorage.removeItem(resumeKey);
 } catch {
   /* Lobby. */
 }
+if (resuming && resuming !== game) use(resuming);
 if (resuming && match && !status(match).complete) play();
 else home();
 
@@ -632,7 +809,7 @@ if ("serviceWorker" in navigator) {
           save();
           try {
             if (["oche", "step"].includes(scene.dataset.shot))
-              sessionStorage.setItem(resumeKey, "1");
+              sessionStorage.setItem(resumeKey, is301() ? "301" : "1");
           } catch {
             /* Reload lands in the lobby instead. */
           }

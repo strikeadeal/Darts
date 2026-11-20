@@ -426,3 +426,125 @@ Same phone and installed app, after Update game to #13. Safari reports `Version/
 - Try to drag the lobby and the help text: the page doesn't move, and the help text still scrolls when it's long.
 - Rotate during a visit.
 - After those, turn the readout off with the five taps.
+
+## 301 · 20 November 2026
+
+Dartshift gets a second game beside Nine Dart Rush: classic 301, solo and as a local duel. This section was written before the code and the code follows it.
+
+### Rules
+
+- **Start and count.** Each player starts on 301. Every dart's score comes off the remaining total. First to exactly zero wins.
+- **Double out, no double in.** The last dart must be a double or the bull (50). One rule set, no settings. Double-out is what makes 301 a different game from Nine Dart Rush; straight-out would just be "score 301 fast". Double-in is left out: on a phone, a beginner already spends visits hunting a double to finish, and doing it at the start too would turn many matches into ten rounds of nothing.
+- **The bull counts as a double** for the finish, as in the regulation game. The outer bull (25) does not.
+- **Bust.** Any of these ends the visit at once and puts the score back to what it was at the start of that visit:
+  - **below zero**;
+  - **left on 1**, which can't be finished on a double;
+  - **zero without a double**, e.g. single 20 on 20.
+  Every dart of a bust visit still counts as thrown.
+- **First to finish wins outright.** In a duel, Player 1 throws first, and if Player 1 checks out, Player 2 does not get an equalising visit. That is the classic rule, and it keeps "game shot" final.
+- **Ten rounds.** Each player gets at most ten visits (30 darts). A strong swipe player finishes 301 in six to nine darts; a beginner may never hit the double. Ten rounds caps a duel at 60 darts, about six Nine Dart Rush matches, rather than letting it run forever.
+- **Tie-break at the limit.** If nobody has checked out after ten rounds, the lowest remaining score wins. Equal remaining scores draw, as equal totals do in Nine Dart Rush. Sudden death was rejected: it would add another phase to explain for a case that only comes up when both players miss doubles for ten rounds.
+- **Solo 301** is a race against the dart count: check out in as few darts as possible within ten rounds. A run that doesn't finish ends "Out of rounds" with the remaining score and sets no record.
+
+### Checkout guide
+
+- When the remaining score can be finished with the darts left in the visit, the empty dart slots on the scoreboard show a route, e.g. `T20 D20` for 100 with three darts in hand. When no route exists (above 170, the bogey numbers 169, 168, 166, 165, 163, 162, 159, or too few darts), the slots stay empty.
+- Routes come from `checkout()` in `src/game.js`, not a hand-typed table: fewest darts first, then the cheapest route by a fixed cost (single set-up darts over trebles over doubles and bulls; finishes D20, D16, D18, D12 … then the bull). Because a single set-up dart is cheaper than a treble, routes often finish on the bull (121 is T20, 11, Bull rather than T20, T11, D14). That suits this game: a straight stroke of 60% of the board width is the calibrated bull shot, so the bull is the easiest double here. Routes never pass through a bust. They are always valid, but not always the route a professional would choose.
+- The guide is on for everyone, always. Beginners need it most, and a player who knows their outs can ignore four small labels.
+- Screen readers hear the route after each dart and at the start of each visit ("41 left. Checkout: single 1, double 20.").
+
+### Match model and saves
+
+- **Game and player count are separate.** `match.mode` keeps meaning player count (`"solo"`/`"duel"`). A 301 match adds `game: "301"`. A match with no `game` is Nine Dart Rush, so every existing match object is unchanged.
+- **One replay for both games.** `status()` replays the saved hits as before. For Nine Dart Rush the replay is the same code; it now also returns the list of visits. For 301 it walks the hits visit by visit, applying busts and the checkout, so a visit can close after one, two or three darts. Starting score, bust reverts and the winner are all rebuilt from the hits; nothing else needs saving. The app reads visit boundaries, the current player and dart from `status().visits` instead of `n % 3`, for both games.
+- **Validation.** A saved 301 match is rejected if any hit comes after the match ended (a checkout, or the end of round ten), as well as for the existing coordinate checks.
+- **Storage: a second key, not a new format.** `dartshift.save.v1` keeps exactly its current shape and meaning: the Nine Dart Rush match, the Nine Dart Rush best, mute and the acknowledged visit. 301 lives in a new key, `dartshift.301.v1`: its match, its best, its acknowledged visit, and which game the lobby last showed.
+  - **No migration is needed.** Every current save loads exactly as before, including a Nine Dart Rush match in progress and its best.
+  - **An older cached copy** that meets a newer save (a rollback, or an old tab writing before it reloads on update) sees only `save.v1`, in the shape it expects, and plays Nine Dart Rush normally. It never reads or writes `dartshift.301.v1`, so it cannot misread a 301 match as Nine Dart Rush and cannot drop the 301 record. Putting 301 into `save.v1` would have failed both ways: the old validator accepts any solo match of up to nine hits, and the old `save()` rewrites only the four fields it knows.
+  - **One match per game.** Each game keeps its own match in progress, so a paused Nine Dart Rush run survives starting a 301 duel. Within a game, starting the other mode still asks before replacing the saved match.
+  - **Update game** writes `dartshift.resume` as `"1"` for Nine Dart Rush (as before) and `"301"` for 301. An older copy treats `"301"` as "go to the lobby".
+
+### Lobby
+
+- A two-way switch, **Nine Dart Rush | 301**, sits above the Solo and Duel buttons. The lobby remembers the last game shown, so the common path (open, tap Solo or Duel) is still one tap, and choosing the other game costs one tap, once.
+- The switch updates the room in place: the tagline, the button descriptions, the personal-best plate and the neon sign ("NINE DART RUSH" or "DOUBLE OUT 301"), which relights. The board and camera don't move.
+- Resume labels are per game: "Resume solo run · Round 4 of 10 · 121 left".
+
+### Records
+
+- Nine Dart Rush keeps `best` (0–540, highest) in `save.v1`, untouched.
+- 301 keeps its own record in `dartshift.301.v1`: **fewest darts to check out in a solo run**, an integer from 6 (the fewest possible: 180 then a 121 finish) to 30. Every dart counts, busts included. A run that doesn't finish sets nothing. Duels set no record, as in Nine Dart Rush.
+
+### Presentation
+
+The room's existing pieces, used for the new moments:
+- **Remaining** is the big number on the scoreboard and counts down dart by dart. In a duel the other player's remaining sits in the corner.
+- **Bust.** The dart's callout reads BUST over the bed it hit, the impact plays the dull miss thud, the visit ends at once and the camera steps back as at any visit end. The card's big number reads BUST with the reason as its caller line ("Below zero · back to 40"), and the busted darts are struck through on the scoreboard.
+- **Checkout.** The finishing dart's callout reads "Game shot", flares the lamp whatever the double's value, then the match ends with the neon relight and fanfare.
+- **Ton-plus visits** get the same caller line ("Ton 40") and second lamp flare as in Nine Dart Rush.
+- **Results.** Instead of a ten-row round table, the card shows darts thrown, three-dart average and best visit for each player.
+
+### Left out
+
+- **501, other starting scores and double-in.** One starting score keeps the lobby to one extra choice.
+- **Legs and sets**, alternating the throw between legs, and a per-match starter choice. Player 1 always throws first.
+- **A straight-out setting.**
+- **A 301 average or best-visit record.** Only fewest darts is kept.
+- **Computer opponents**, as before.
+
+### What changed in the code
+
+- `src/game.js`:
+  - `freshMatch(mode, game)`, the 301 replay in `status()` and the visit list for both games;
+  - `checkout()`, and 301 validation in `decodeMatch()`;
+  - `readSaves()` and `writeSaves()` for the two keys.
+  `scoreAt()` is untouched.
+- `src/app.js` reads visit boundaries from `status().visits`, keeps one match, record and acknowledged visit per game, and adds the lobby switch and the 301 copy. The throw, flight, camera, hold and landing code paths are the same functions as before.
+- `style.css`:
+  - adds the switch, the checkout and struck-out slots, and the bust callout colour;
+  - in the scene tuning's short-portrait block, adds a wide shot (`--wide-y: -0.05; --wide-z: 2.2`), so the lobby board clears the taller lobby on SE-class screens.
+- No `tune` value, `src/input.js`, `src/throw.js`, `src/art.js` or worker change.
+
+## 301 verification · 20 November 2026
+
+- **Automated.** All 34 Node tests pass. The 13 new ones in `tests/x01.test.js` cover:
+  - each bust (below zero, left on 1 including on a first dart, zero off a single or treble, zero off the outer bull);
+  - checkouts on a double and on the bull, finishing on the first, second and third dart;
+  - a duel won outright with no reply, and turn order after a bust;
+  - the ten-round limit: solo, duel won on the lower score, and a drawn duel;
+  - rebuilding mid-visit and just-bust saves, and rejecting darts after the end;
+  - every checkout route from 2 to 170, including the bogey numbers;
+  - loading current `save.v1` saves unchanged, and the 301 key surviving an older copy's rewrite.
+
+  The production build precaches 22 local assets, as before.
+- **Engine.** This session had Playwright 1.63 with Chromium only. WebKit and Firefox weren't installed, and no Mac, simulator or iPhone was attached. Everything below is Chromium under `/Darts/`, with simulated safe-area insets.
+- **Complete matches** with `scripts/check/match.cjs`, which now plays 301 too. All passed with clean consoles, results matching the saved hits and focus checks in keyboard runs:
+  - **301 by keyboard, a scripted route.** Each run hits all three bust types, then checks out on D3 with the third dart.
+    - Solo at 390×844 with reduced motion and at 320×568 and 375×667: 17 darts, three bust cards, "Checked out", record 17.
+    - Duel at 390×844: Player 1 wins on the game shot, and Player 2 never gets a reply visit.
+  - **301 by touch.** A 393×852 solo and a 320×568 reduced-motion solo ran to the ten-round limit ("Out of rounds", the latter with a bust). A 375×667 duel, a 390×844 duel and an 852×393 reduced-motion duel with four busts went the full sixty darts and were decided on the lower score.
+  - **301 checkout by touch.** A solo seeded on 50 finished with a calibrated straight stroke on the bull: game shot, "Checked out", record saved.
+  - **Nine Dart Rush regressions:** a touch solo at 390×844, a touch duel at 852×393, a keyboard duel with reduced motion at 390×844, and keyboard solos at 320×568 and 390×844. Each had nine or eighteen darts, the same cards and the same totals.
+- **Update, offline and rollback.** This used a real service worker, three builds (the previous release at 5fca17d, this build, and this build with one changed byte) and one browser profile:
+  1. The previous release, mid Nine Dart Rush solo, with mute on and a best of 450. Update game reloaded straight into the same visit on 230. The next dart saved, and the best and mute were kept.
+  2. On this build, a 301 solo was left on the bust card. Updating to the newer build resumed on that bust card ("Left on 1 · back to 121"), and the next visit showed the checkout guide.
+  3. With the server stopped, a reload launched from cache in the 301 lobby, resumed and took a dart.
+  4. **Rollback.** The previous release was served again and applied with its Update game. It resumed its own Nine Dart Rush match with best 450 and took a dart, and the 301 key was byte-for-byte unchanged.
+  5. Forward to this build again: the 301 match, the 301 record, the Nine Dart Rush match, best and mute were all intact.
+- **Looked at** (screenshots): the lobby for both games, the checkout guide, the bust card and the results at 390×844, 320×568 and 852×393, and the How to play sheet. At 320×568 the lobby panel covered the lower half of the board until the short-portrait wide shot above was added. Now the board ends at 319 px and the panel starts at 331 px.
+- **Pre-existing, left alone.** In a duel at 320 px wide, the scoreboard's "Player 1" label wraps to two lines next to "Player 2 · 244". The previous release does the same in a Nine Dart Rush duel.
+- **Not re-run.**
+  - The nine-viewport safe-area audit and the 44 px control audit; only the sizes above were checked.
+  - Tip alignment and frame timing, because no throw, flight or landing code changed.
+  - WebKit.
+
+**Still to check on the phone:**
+- **The lobby switch.** Pick 301, close the app, reopen it and confirm 301 is still selected. Check the neon relights, and that the switch is easy to hit and doesn't crowd the board on an SE.
+- **A 301 solo to a checkout.** Watch that:
+  - the remaining score counts down;
+  - the checkout slots are readable at arm's length;
+  - a bust ends the visit with the dull thud and the BUST callout;
+  - the game shot gets the flare, neon and fanfare.
+- **A 301 duel through at least one bust handoff,** in portrait and landscape.
+- **VoiceOver on one 301 visit.** It should read the remaining score and the checkout after each dart, "Bust, left on 1. Back to 121." on a bust, and the checkout route on the slots.
+- **Update game from the live release mid-match.** The existing Nine Dart Rush match and best should carry over.
