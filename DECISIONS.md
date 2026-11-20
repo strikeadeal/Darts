@@ -386,3 +386,43 @@ The first fix shipped in #12. The readout was screenshotted on the reporting iPh
 New rows show the document's height and scroll position. Touches are logged as both pointer and touch events, in case WebKit sends one without the other.
 
 **If `doc` fails on the phone,** the band is outside anything the page can draw. That would mean the web view itself ends at 793. The remaining lever is the status-bar style: dropping `black-translucent` makes iOS reserve the top 59 px as a status bar band. That trades the dead band for an opaque top bar and needs every player to reinstall. That isn't decided until the readout rules out the page-side fixes.
+
+### On the phone · second readout
+
+Same phone and installed app, after Update game to #13. Safari reports `Version/26.6.1`; the OS token is frozen at 18.7.
+
+- **`doc` didn't work.** With the document `--vh` tall and the root `overflow: hidden`, the bottom still stayed dead.
+- **`flow` worked.** That is the root left `overflow: visible`, with a normal-flow body at least `--vh` tall.
+  - **Portrait:** the room reached the bottom edge, with the amber bar on it. Touches at 840 arrived as both pointer and touch events.
+  - **WebKit's own figures came back to full height:** `innerHeight`, `visualViewport` and `100%` read 852, and `100dvh` 852. Only `clientHeight` (793) and `100svh` (793) stayed short.
+  - **Landscape:** `innerHeight` was 393, where the first readout had 334.
+  - **No scroll:** the scroll offset stayed 0 throughout. Rotation, a return from the background and focus were all logged.
+- **What this means.** A root that clips (`overflow: hidden` on `html`) cuts the installed app off at the short layout viewport, whatever the document's height. With the root left visible, `body`'s `overflow: hidden` passes to the viewport instead, which still stops the page scrolling. A body at least screen height then gives WebKit the full screen back.
+- **Not isolated.** `doc` and `flow` differ in two things: the root's overflow, and how the document height is set. With one round per deploy, I shipped the combination that was measured working rather than splitting them.
+
+**Shipped.**
+- `src/viewport.js` sets `--vh` and a `data-screen` attribute on the root, and no longer sets the height inline.
+- In `style.css`, `:root[data-screen]` gets `height: auto; overflow: visible`, and its `body` gets `height: auto; min-height: var(--vh)`. This is exactly the `flow` rules.
+- Safari tabs, iPad windows and other browsers never get the attribute, so they keep `height: 100%; overflow: hidden`.
+- `tests/viewport.test.js` checks both rules.
+- The readout's fix switch is gone. The readout itself stays behind the five-tap flag for the remaining checks.
+
+**Re-measured in the Chromium model.**
+- **Tips.** 9 swipes per layout; largest tip error:
+  - 0.000018 CSS px at 393×852 laid out at 793;
+  - 0.000019 at 320×568 laid out at 548;
+  - 0.000015 at 852×393 with the phone's insets;
+  - 0.000016 at 667×375;
+  - 0.000015 in a Safari tab.
+- **Layouts** are unchanged from the previous round, and the reach test holds.
+- **Scrolling.** A wheel and a touch scroll gesture on the lobby left the scroll offset at 0.
+- **Matches.** A touch solo (393×852), a reduced-motion touch duel (852×393) and a keyboard solo (320×568) all finished.
+- **Dialog and readout.** The help sheet ends at 852. The readout toggles on and off.
+- **No `tune` change.**
+
+**Still to check on the phone with this build:**
+- Play a few darts in portrait: the dart sits near the home indicator and picks up.
+- Open How to play: the sheet reaches the bottom edge, with the backdrop covering everything.
+- Try to drag the lobby and the help text: the page doesn't move, and the help text still scrolls when it's long.
+- Rotate during a visit.
+- After those, turn the readout off with the five taps.
