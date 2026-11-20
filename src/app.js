@@ -12,7 +12,7 @@ import {
 } from "./game.js";
 import { icon, board, landed, readyDart } from "./art.js";
 import { bindThrows, bindTurnButton, flyDart } from "./input.js";
-import { boardPosition } from "./throw.js";
+import { boardPosition, tune } from "./throw.js";
 import { unlock, impact, whoosh, fanfare } from "./sound.js";
 import { fitScreen } from "./viewport.js";
 
@@ -31,21 +31,30 @@ const read = (key) => {
 };
 // Each game keeps its own match, record and acknowledged visit (src/game.js
 // readSaves). `game` is the one on screen; match, best and acknowledged are its
-// copies, put back by use() and save().
-const saves = readSaves(read(saveKeys.rush), read(saveKeys.x01));
+// copies, put back by use() and save(). `best` is the record set with the flick;
+// saves[game].best is the old throw's, kept as it was.
+const saves = readSaves(read(saveKeys.rush), read(saveKeys.x01), read(saveKeys.flick));
 let game = saves.lobby;
-let { match, best, acknowledged } = saves[game];
+let { match, acknowledged } = saves[game];
+let best = saves.flick[game];
 let muted = saves.muted;
 let freshBest = false;
 let cancelAim = () => {};
+function stash() {
+  Object.assign(saves[game], { match, acknowledged });
+  saves.flick[game] = best;
+}
 function use(next) {
-  Object.assign(saves[game], { match, best, acknowledged });
+  stash();
   game = saves.lobby = next;
-  ({ match, best, acknowledged } = saves[game]);
+  ({ match, acknowledged } = saves[game]);
+  best = saves.flick[game];
   sign();
 }
+// A match begun before the flick sets no record when it ends.
+const carried = () => saves.flick.carried.includes(game);
 function save() {
-  Object.assign(saves[game], { match, best, acknowledged });
+  stash();
   saves.muted = muted;
   try {
     for (const [key, value] of Object.entries(writeSaves(saves)))
@@ -251,6 +260,7 @@ const games = {
     duel: "Face a friend. Pass the phone.",
     rounds: 3,
     bestLabel: "Personal best",
+    oldLabel: "Best · old throw",
   },
   301: {
     name: "301",
@@ -260,10 +270,11 @@ const games = {
     duel: "First to zero on a double wins.",
     rounds: x01.rounds,
     bestLabel: "Fewest darts",
+    oldLabel: "Fewest · old throw",
   },
 };
 const is301 = () => game === "301";
-const bestText = () => (best === null ? "—" : best + (is301() ? " darts" : ""));
+const bestText = (n = best) => (n === null ? "—" : n + (is301() ? " darts" : ""));
 // The neon sign names the game (index.html holds Nine Dart Rush for first paint).
 function sign() {
   const [top, big] = games[game].neon;
@@ -298,7 +309,8 @@ const lobbyDarts = [
 ];
 
 function lobbyParts() {
-  const g = games[game];
+  const g = games[game],
+    old = best === null ? saves[game].best : null;
   const modeButton = (mode, title) => {
     const s = match?.mode === mode && !status(match).complete && status(match);
     const left = s && is301() ? " · " + s.totals.join("–") + (mode === "solo" ? " left" : "") : "";
@@ -311,7 +323,8 @@ function lobbyParts() {
   const pick = (id, name) =>
     `<button data-game="${id}" aria-pressed="${game === id}">${name}</button>`;
   return {
-    plate: `<div class="plate best-plate"><span class="plate-label">${g.bestLabel}</span><b class="plate-score">${bestText()}</b></div>`,
+    // Until the flick sets one, the lobby shows the old throw's record as that.
+    plate: `<div class="plate best-plate"><span class="plate-label">${old === null ? g.bestLabel : g.oldLabel}</span><b class="plate-score">${bestText(old ?? best)}</b></div>`,
     panel: `<section class="lobby" aria-labelledby="lobby-title">
        <h1 id="lobby-title" class="sr">Dartshift · ${g.name}</h1>
        <div class="games" role="group" aria-label="Game">${pick("rush", "Nine Dart Rush")}${pick("301", "301")}</div>
@@ -369,7 +382,7 @@ function sheet(title, body, bind) {
 function help() {
   sheet(
     "How to play",
-    '<ol class="steps"><li><strong>Pick up the dart.</strong><small>Put your finger on the dart beneath the board. Swipe up at least a third of the board’s width and lift.</small></li><li><strong>Throw along your line.</strong><small>Angle left or right. A longer stroke reaches higher. Start with a straight stroke just over half a board wide.</small></li><li><strong>Finish with a flick.</strong><small>A quick finish carries higher on a flatter arc. Ease off for a lower hit. A sideways flick trims your line.</small></li></ol><p class="body-copy">The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50.</p><p class="body-copy"><strong>Nine Dart Rush.</strong> Three darts per visit, three visits each. Highest total wins.</p><p class="body-copy"><strong>301.</strong> Count down from 301 to exactly zero. The last dart must be a double or the bull. Going below zero, leaving 1 or reaching zero any other way is a bust: the visit ends and your score goes back. Empty dart slots suggest a checkout. Ten rounds each; if nobody finishes, the lowest score wins.</p><button class="primary full" id="okay">Got it</button>',
+    '<ol class="steps"><li><strong>Pick up the dart.</strong><small>Put your finger on the dart beneath the board.</small></li><li><strong>Flick it up.</strong><small>The faster the flick, the higher the dart lands. Lean the stroke left or right to aim. Start with a medium flick at the bull.</small></li><li><strong>Keep it clean.</strong><small>Swipe straight and let go while your finger is still moving. A curved, slowing or paused stroke scatters the dart.</small></li></ol><p class="body-copy">The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50.</p><p class="body-copy"><strong>Nine Dart Rush.</strong> Three darts per visit, three visits each. Highest total wins.</p><p class="body-copy"><strong>301.</strong> Count down from 301 to exactly zero. The last dart must be a double or the bull. Going below zero, leaving 1 or reaching zero any other way is a bust: the visit ends and your score goes back. Empty dart slots suggest a checkout. Ten rounds each; if nobody finishes, the lowest score wins.</p><button class="primary full" id="okay">Got it</button>',
     () => {
       $("#okay").onclick = () => $("#modal").close();
       $("#sheet-title").onclick = probeTap;
@@ -406,11 +419,12 @@ function start(mode) {
   match = freshMatch(mode, game);
   acknowledged = -1;
   freshBest = false;
+  saves.flick.carried = saves.flick.carried.filter((g) => g !== game);
   save();
   play();
   say(
     (is301() ? "301, double out. " : "") +
-      "Round one. Touch the dart and swipe up at least a third of the board’s width to throw. A longer stroke or quicker finish lands higher.",
+      "Round one. Touch the dart and flick it up to throw. The faster the flick, the higher it lands. Keep the stroke straight.",
   );
 }
 function selectMode(mode) {
@@ -507,9 +521,9 @@ function caller(total) {
 }
 const throwControl = `<button class="throw-control" id="throw" aria-label="Throw dart" aria-describedby="throw-keys">
     <span class="dart-grip">${readyDart}</span>
-    <b class="hint">Flick the dart up</b><small>At least ⅓ board width · Flick faster for height</small>
+    <b class="hint">Flick the dart up</b><small>Faster flies higher · keep it straight</small>
   </button>
-  <span class="sr" id="throw-keys">Touch the dart and swipe up at least a third of the board’s width. On a keyboard, aim with the arrows, then press and release Space or Enter. Shift and arrows fine-tune your aim.</span>`;
+  <span class="sr" id="throw-keys">Touch the dart and flick it up: the faster the flick, the higher it lands. Keep the stroke straight and let go while still moving. On a keyboard, aim with the arrows, then press and release Space or Enter. Shift and arrows fine-tune your aim.</span>`;
 
 function play(impactClass = "", leaving = false) {
   const s = status(match),
@@ -604,14 +618,29 @@ function play(impactClass = "", leaving = false) {
     if (cancelAim === reset) reset(true);
   });
 }
-function land(point, held, geo) {
+// After a throw that went astray, the next dart's prompt says why: the stroke's
+// biggest fault if it cost 6 mm or more, else which way a clean flick left the board.
+function coach(stroke, { x, y }) {
+  const [fault, mm] = Object.entries(stroke?.faults || {}).sort((a, b) => b[1] - a[1])[0] || [];
+  if (mm >= 6)
+    return {
+      bend: "Keep the stroke straight",
+      slowdown: "Let go while still flicking",
+      speed: stroke.speed > tune.input.fast ? "Too hard · flick softer" : "Too soft · flick harder",
+    }[fault];
+  if (!stroke || Math.hypot(x, y) <= 170) return "";
+  if (Math.abs(x) > Math.abs(y)) return "Too wide · straighten your line";
+  return y < 0 ? "Too high · flick softer" : "Too low · flick harder";
+}
+function land(point, held, geo, stroke) {
   const hit = scoreAt(point.x, point.y);
   match = advance(match, point);
   const s = status(match),
     v = s.visits.at(-1),
     note = noteOf(v),
-    darts = match.hits.length;
-  if (s.complete && match.mode === "solo") {
+    darts = match.hits.length,
+    tip = coach(stroke, point);
+  if (s.complete && match.mode === "solo" && !carried()) {
     if (!is301()) {
       freshBest = best === null || s.totals[0] > best;
       best = Math.max(best ?? 0, s.totals[0]);
@@ -656,11 +685,14 @@ function land(point, held, geo) {
               : v.closed
                 ? s.totals[v.player] + " left."
                 : standing(s.totals[v.player], 3 - v.hits.length)) +
-            (s.complete ? " " + verdict(s) + "." : ""),
+            (s.complete ? " " + verdict(s) + "." : "") +
+        (tip && !s.complete ? " " + tip + "." : ""),
     );
     defer(() => {
       play(effect);
       if (big) moment("flare");
+      const prompt = tip && stage.querySelector(".throw-control .hint");
+      if (prompt) prompt.textContent = tip;
     });
   }
   cancelAim = showLanding;
@@ -702,9 +734,11 @@ function finish(impactClass = "") {
     score = `${totals.map((t, i) => `<span class="${duel ? "p" + (i + 1) : ""}">${t}</span>`).join("<i>–</i>")}<small>PTS</small>`;
     line = duel
       ? "Final dart · " + hit.label + " (+" + hit.points + ")"
-      : freshBest
-        ? "New personal best"
-        : "Personal best · " + best;
+      : carried()
+        ? "Begun with the old throw · no record"
+        : freshBest
+          ? "New personal best"
+          : "Personal best · " + bestText();
     table = `<thead><tr><th>Visit</th>${totals.map((_, i) => "<th>" + (duel ? playerName(i) : "Points") + "</th>").join("")}</tr></thead><tbody>${rounds}</tbody>`;
   } else {
     title = verdict(s);
@@ -716,9 +750,11 @@ function finish(impactClass = "") {
     line = s.out
       ? duel
         ? "Game shot · " + hit.label
-        : freshBest
-          ? "New personal best"
-          : "Personal best · " + bestText()
+        : carried()
+          ? "Begun with the old throw · no record"
+          : freshBest
+            ? "New personal best"
+            : "Personal best · " + bestText()
       : duel
         ? x01.rounds + " rounds up · " + (s.winner === null ? "level on " + totals[0] : "lowest score wins")
         : "Check out within " + x01.rounds + " rounds to set a best";

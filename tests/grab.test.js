@@ -49,24 +49,36 @@ const layouts = [
   { size: "852×393 measured", board: 303, bottom: 388.5, cx: 409, frame: [59, 0, 793] },
 ];
 
-test("every bed is reachable from the dart on the smallest screens", () => {
-  const g = tune.input;
-  const edge = radii.edge - 0.1; // just inside the outer double wire
+test("every bed is reachable from the dart with a comfortable clean flick on the smallest screens", () => {
+  const g = tune.input,
+    k = g.sensitivity;
+  // Comfortable: well inside the free speed range at both ends.
+  const soft = 1.2 * g.slow,
+    hard = 0.8 * g.fast;
+  const beds = [
+    [0, -166, "Double 20"],
+    [0, 166, "Double 3"],
+    [-166, 0, "Double 11"],
+    [166, 0, "Double 6"],
+    [-97.6, -134.3, "Double 12"],
+    [97.6, -134.3, "Double 18"],
+  ];
   for (const { size, board: w, bottom, cx, frame } of layouts) {
     const [left, top, right] = frame;
-    // Neutral releases (no lift or trim to help) to the top, left and right doubles.
-    const up = (-edge / g.vertical - g.bullRise) * w;
-    const side = (edge / g.horizontal) * w;
-    const strokes = [
-      [0, up, "Double 20"],
-      [-side, -g.bullRise * w, "Double 11"],
-      [side, -g.bullRise * w, "Double 6"],
-    ];
-    for (const [dx, dy, label] of strokes) {
-      const hit = swipeLanding(dx, dy, w);
-      assert.equal(scoreAt(hit.x, hit.y).label, label, size);
-      assert.ok(bottom + dy >= top, `${size}: ${label} needs the finger above the frame`);
-      assert.ok(cx + dx >= left && cx + dx <= right, `${size}: ${label} off the side`);
+    for (const [x, y, label] of beds) {
+      // From the lowest point of the touch target, the stroke leans to the bed's
+      // line; find a length that fits the screen and needs a comfortable speed.
+      const angle = x / (k * g.aim) * (Math.PI / 180);
+      let found = null;
+      for (let L = 0.35; L <= 0.9 + 1e-9 && !found; L += 0.05) {
+        const dx = Math.sin(angle) * L * w,
+          dy = -Math.cos(angle) * L * w;
+        const speed = g.cruise * 2 ** ((k * g.reach * (g.bullRise - L) - y) / (k * g.height));
+        if (speed < soft || speed > hard || bottom + dy < top || cx + dx < left || cx + dx > right) continue;
+        const hit = swipeLanding(dx, dy, w, speed);
+        if (hit && scoreAt(hit.x, hit.y).label === label) found = { L, speed };
+      }
+      assert.ok(found, `${size}: no comfortable flick reaches ${label}`);
     }
   }
 });

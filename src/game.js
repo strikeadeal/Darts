@@ -226,30 +226,49 @@ export function advance(match, point) {
 // Saved data. dartshift.save.v1 keeps its original shape and meaning (Nine Dart
 // Rush match and best, mute, acknowledged visit), so an older cached copy of the
 // app still reads and writes it correctly. 301 lives only in its own key, which
-// older copies never touch (DECISIONS.md, "301").
-export const saveKeys = { rush: "dartshift.save.v1", x01: "dartshift.301.v1" };
+// older copies never touch (DECISIONS.md, "301"). Records set with the flick live
+// in a third: the bests in the other two are from the old throw and are never
+// overwritten here (DECISIONS.md, "The flick").
+export const saveKeys = {
+  rush: "dartshift.save.v1",
+  x01: "dartshift.301.v1",
+  flick: "dartshift.flick.v1",
+};
+const gameNames = ["rush", "301"];
 const record = (n, low, high) =>
   Number.isInteger(n) && n >= low && n <= high ? n : null;
 const seen = (n, match) =>
   Number.isInteger(n) && n === match?.hits.length ? n : -1;
-export function readSaves(v1, v301) {
+// rush.best and 301.best are the old throw's records. flick holds the records set
+// since, and `carried`: games whose match in progress began before the flick, so
+// finishing it sets no record. The first time the flick key is missing, that is
+// every match still in progress.
+export function readSaves(v1, v301, flick) {
   const a = v1 && typeof v1 === "object" ? v1 : {},
-    b = v301 && typeof v301 === "object" ? v301 : {};
+    b = v301 && typeof v301 === "object" ? v301 : {},
+    f = flick && typeof flick === "object" ? flick : null;
   const rush = decodeMatch(a.match),
     three = decodeMatch(b.match);
   const r = rush && !rush.game ? rush : null,
     t = three?.game === "301" ? three : null;
+  const open = { rush: r && !status(r).complete, 301: t && !status(t).complete };
   return {
     muted: a.muted === true,
     lobby: b.lobby === "301" ? "301" : "rush",
     rush: { match: r, best: record(a.best, 0, 540), acknowledged: seen(a.acknowledged, r) },
     301: { match: t, best: record(b.best, 6, x01.rounds * 3), acknowledged: seen(b.acknowledged, t) },
+    flick: {
+      rush: record(f?.rush, 0, 540),
+      301: record(f?.[301], 6, x01.rounds * 3),
+      carried: gameNames.filter((g) => open[g] && (f ? Array.isArray(f.carried) && f.carried.includes(g) : true)),
+    },
   };
 }
-export function writeSaves({ muted, lobby, rush, 301: t }) {
+export function writeSaves({ muted, lobby, rush, 301: t, flick }) {
   return {
     [saveKeys.rush]: { match: rush.match, best: rush.best, muted, acknowledged: rush.acknowledged },
     [saveKeys.x01]: { match: t.match, best: t.best, acknowledged: t.acknowledged, lobby },
+    [saveKeys.flick]: { rush: flick.rush, 301: flick[301], carried: flick.carried },
   };
 }
 

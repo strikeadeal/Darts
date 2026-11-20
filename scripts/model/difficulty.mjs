@@ -6,6 +6,7 @@
 //   node scripts/model/difficulty.mjs --ablate   also each change's contribution
 //   node scripts/model/difficulty.mjs --robust   also with every motor noise ×⅔ and ×1.5
 //   node scripts/model/difficulty.mjs --legacy   before only (what was measured before tuning)
+//   node scripts/model/difficulty.mjs --after    after only
 //
 // Everything is seeded, so a run prints the same numbers every time.
 import * as legacy from "./legacy-throw.mjs";
@@ -117,23 +118,26 @@ export function synth(model, i, w, hz, r) {
   const start = { x: x0 + sx, y: y0 + sy };
   const samples = [];
   model.addSample(samples, start.x, start.y, 0);
-  const dt = 1000 / hz;
-  let t = dt,
-    last = start;
-  for (; t < lift; t += dt) {
+  let last = start;
+  const move = (t) => {
     const [x, y] = sense(at(t));
     last = { x: x0 + x, y: y0 + y };
     model.addSample(samples, last.x, last.y, t);
+  };
+  if (r) {
+    // The screen samples at `hz` from the touch, and reports the lift as
+    // pointerup on the next sample, where the finger last was.
+    const dt = 1000 / hz;
+    let t = dt;
+    for (; t < lift; t += dt) move(t);
+    model.addSample(samples, last.x, last.y, t + r());
+  } else {
+    // Without noise the plan is traced at 240 Hz with a sample exactly at the
+    // lift, so a solver sees a smooth mapping rather than steps between samples.
+    const dt = 1000 / 240;
+    for (let k = Math.floor(lift / dt); k >= 0; k--) if (lift - k * dt > 0) move(lift - k * dt);
+    model.addSample(samples, last.x, last.y, lift + 2);
   }
-  // The lift arrives as pointerup on the next sample, where the finger last was.
-  // Without noise (r null) the plan is traced exactly to the lift instead, so a
-  // solver sees a smooth mapping rather than steps at sample boundaries.
-  if (!r) {
-    const [x, y] = at(lift);
-    last = { x: x0 + x, y: y0 + y };
-    model.addSample(samples, last.x, last.y, (t = lift));
-  }
-  model.addSample(samples, last.x, last.y, t + (r ? r() : 0.5));
   return model.releaseThrow(start, samples, w, r ? Math.floor(r() * 2 ** 32) : 1);
 }
 
@@ -166,41 +170,70 @@ const calm = (plan, p) => {
 };
 
 // ------------------------------------------------------------------ aiming
+// A player can learn where a stroke lands on average, never which way a sloppy
+// stroke's scatter falls, so aiming uses the landing without it.
+const costs = ["outside", "bendCost", "slowdownCost"];
+function clean(model, fn) {
+  const t = model.tune?.input;
+  if (!t || !(costs[0] in t)) return fn();
+  const saved = costs.map((k) => t[k]);
+  costs.forEach((k) => (t[k] = 0));
+  try {
+    return fn();
+  } finally {
+    costs.forEach((k, i) => (t[k] = saved[i]));
+  }
+}
+
 // The player has learned the throw: for a target, find the plan whose average
-// landing on their own phone is the target. Two ways to aim, and the player uses
+// landing on their own phone is the target. Three ways to aim, and the player uses
 // whichever lands more often: keep a natural speed and vary the length, keep a
 // length and vary the speed, or slide to a spot and stop before lifting.
+// Newton's method on (direction, length) or (direction, log speed), with a
+// backtracking step so a trial that lands off the board (clamped) is not trusted.
 export function solve(model, target, plan, free, p, w) {
-  let th = Math.atan2(target.x, 330),
-    q = plan[free];
-  const lo = free === "L" ? 0.34 : 0.2,
-    hi = free === "L" ? 1.3 : 30;
-  const land = (theta, v) => synth(model, calm({ ...plan, theta, [free]: v }, p), w, 1000, null);
-  for (let k = 0; k < 40; k++) {
-    const a = land(th, q);
-    if (!a) {
-      q = clamp(free === "L" ? q + 0.05 : q, lo, hi);
-      if (free !== "L") return null;
-      continue;
-    }
+  const log = free !== "L";
+  const lo = log ? Math.log(0.2) : 0.34,
+    hi = log ? Math.log(30) : 1.1; // no stroke longer than a comfortable reach
+  const land = (theta, u) =>
+    clean(model, () => synth(model, calm({ ...plan, theta, [free]: log ? Math.exp(u) : u }, p), w, 1000, null));
+  const off = (a) => !a || Math.abs(a.x) > 200 || Math.abs(a.y) > 200;
+  let th = 0,
+    u = log ? Math.log(plan[free]) : plan[free];
+  let a = land(th, u);
+  for (let k = 0; k < 60; k++) {
+    if (off(a)) return null;
     const ex = a.x - target.x,
-      ey = a.y - target.y;
-    if (Math.hypot(ex, ey) < 0.02) return { ...plan, theta: th, [free]: q };
-    const h = 1e-3,
-      hq = free === "L" ? 1e-3 : q * 1e-3;
-    const b = land(th + h, q),
-      c = land(th, q + hq);
-    if (!b || !c) return null;
+      ey = a.y - target.y,
+      err = Math.hypot(ex, ey);
+    if (err < 0.02) return { ...plan, theta: th, [free]: log ? Math.exp(u) : u };
+    const h = 1e-3;
+    const b = land(th + h, u),
+      c = land(th, u + h);
+    if (off(b) || off(c)) return null;
     const j11 = (b.x - a.x) / h,
-      j12 = (c.x - a.x) / hq,
+      j12 = (c.x - a.x) / h,
       j21 = (b.y - a.y) / h,
-      j22 = (c.y - a.y) / hq;
+      j22 = (c.y - a.y) / h;
     const det = j11 * j22 - j12 * j21;
     if (!det) return null;
-    const dth = (ex * j22 - ey * j12) / det,
-      dq = (ey * j11 - ex * j21) / det;
-    th = clamp(th - clamp(dth, -0.2, 0.2), -1.2, 1.2);
-    q = clamp(q - clamp(dq, -0.3 * (hi - lo), 0.3 * (hi - lo)), lo, hi);
+    let dth = (ex * j22 - ey * j12) / det,
+      du = (ey * j11 - ex * j21) / det;
+    const big = Math.max(Math.abs(dth) / 0.2, Math.abs(du) / (log ? 0.5 : 0.1), 1);
+    dth /= big;
+    du /= big;
+    let next = null;
+    for (let s = 1; s > 1 / 64; s /= 2) {
+      const t2 = clamp(th - s * dth, -1.2, 1.2),
+        u2 = clamp(u - s * du, lo, hi);
+      const n = land(t2, u2);
+      if (!off(n) && Math.hypot(n.x - target.x, n.y - target.y) < err) {
+        next = [t2, u2, n];
+        break;
+      }
+    }
+    if (!next) return null;
+    [th, u, a] = next;
   }
   return null;
 }
@@ -211,10 +244,12 @@ function deviceBias(model, plan, p, w, hz, r) {
   let sx = 0,
     sy = 0,
     n = 0;
-  for (let k = 0; k < 64; k++) {
-    const a = synth(model, { ...calm(plan, p), dwell: 20 + 60 * r() }, w, hz, r);
-    if (a) (sx += a.x), (sy += a.y), n++;
-  }
+  clean(model, () => {
+    for (let k = 0; k < 64; k++) {
+      const a = synth(model, { ...calm(plan, p), dwell: 20 + 60 * r() }, w, hz, r);
+      if (a) (sx += a.x), (sy += a.y), n++;
+    }
+  });
   return n ? { x: sx / n, y: sy / n } : null;
 }
 
@@ -403,9 +438,9 @@ export function novices(model, p, control, { count = quick ? 300 : 1000, darts =
       if (Math.hypot(h.x, h.y) <= 170) on[d]++;
       dist[d].push(Math.hypot(h.x, h.y));
       // Feedback: how far, and which way. Correct half of it.
-      const base = synth(model, calm(plan, p), w, 1000, null);
+      const base = clean(model, () => synth(model, calm(plan, p), w, 1000, null));
       const bump = control === "L" ? { L: plan.L + 0.01 } : { peak: plan.peak * 1.01 };
-      const moved = base && synth(model, calm({ ...plan, ...bump }, p), w, 1000, null);
+      const moved = base && clean(model, () => synth(model, calm({ ...plan, ...bump }, p), w, 1000, null));
       if (moved && moved.y !== base.y) {
         const step = (-0.5 * clamp(h.y, -250, 250)) / (moved.y - base.y);
         if (control === "L") plan.L = clamp(plan.L + 0.01 * step, 0.36, 1.1);
@@ -444,6 +479,34 @@ export function touchSpread(model, p, labels = ["Bull", "T20", "D20", "D11"], w 
   return rows;
 }
 
+// ---------------------------------------- clean strokes and pointer aiming
+// For the flick only: how often each profile's strokes aimed at T20 earn no miss
+// at all, and the typical miss of the rest; and how well slide-and-stop does.
+export function cleanliness(model, p, { hz = 60, n = quick ? 1000 : 4000 } = {}) {
+  let read = null;
+  const spy = { ...model, releaseThrow: (s, samples, w, seed) => ((read = model.readStroke(s, samples, w)), model.releaseThrow(s, samples, w, seed)) };
+  const pl = player(spy, p, { hz, seed: 21 }),
+    plan = pl.aim("T20"),
+    r = random(22);
+  const misses = [];
+  for (let k = 0; k < n; k++) if (synth(spy, noisy(plan, p, W, r), W, hz, r) && read) misses.push(read.miss);
+  misses.sort((a, b) => a - b);
+  const faulted = misses.filter((m) => m > 0);
+  return { clean: 1 - faulted.length / misses.length, median: faulted[Math.floor(faulted.length / 2)] || 0 };
+}
+export function slideAndStop(model, p, { hz = 60, n = quick ? 1000 : 4000 } = {}) {
+  const r = random(23);
+  const plan = solve(model, { x: 0, y: -103 }, { peak: 1.5, L: 0.6, style: "slide" }, "L", p, W);
+  const top = clean(model, () => synth(model, calm({ peak: 1.5, L: 1.1, theta: 0, style: "slide" }, p), W, 1000, null));
+  if (!plan) return { t20: 0, highest: top?.y ?? null };
+  let hits = 0;
+  for (let k = 0; k < n; k++) {
+    const h = synth(model, noisy(plan, p, W, r), W, hz, r);
+    if (h && bedOf(h) === "T20") hits++;
+  }
+  return { t20: hits / n, highest: top?.y ?? null };
+}
+
 // ------------------------------------------------------------------ report
 const pct = (v) => (100 * v).toFixed(1) + "%";
 const row = (name, m) =>
@@ -458,7 +521,7 @@ export const models = {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const t0 = Date.now();
-  const list = args.has("--legacy") ? ["before"] : ["before", "after"];
+  const list = args.has("--legacy") ? ["before"] : args.has("--after") ? ["after"] : ["before", "after"];
   console.log(head);
   const results = {};
   for (const m of list)
@@ -475,6 +538,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`\nFirst-time players, ${m}: on the board, darts 1–15: ${n.on.map((v) => (100 * v).toFixed(0)).join(" ")} %`);
     console.log(`  median distance from the bull, mm: ${n.median.map((v) => v.toFixed(0)).join(" ")}`);
   }
+  if (list.includes("after"))
+    for (const [pname, p] of Object.entries(profiles)) {
+      const c = cleanliness(models.after, p),
+        sl = slideAndStop(models.after, p);
+      console.log(
+        `\nAfter, ${pname}: ${pct(c.clean)} of T20 strokes earn no miss (median miss of the rest ${c.median.toFixed(1)} mm). ` +
+          `Slide and stop: T20 ${pct(sl.t20)}; at the longest slide it lands at y ${sl.highest?.toFixed(0)} mm.`,
+      );
+    }
   for (const m of list) {
     console.log(`\nTouch noise alone, ${m} (skilled plan; mean shift 60→120 Hz and 1σ in mm):`);
     for (const t of touchSpread(models[m], profiles.skilled))

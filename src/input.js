@@ -5,6 +5,7 @@ import {
   clamp,
   entryPose,
   onDart,
+  readStroke,
   releaseThrow,
   tune,
 } from "./throw.js";
@@ -144,15 +145,16 @@ export function bindThrows(field, wakeAudio, land, hint, skipped) {
     sample(event);
     const { geo } = stroke;
     const point = releaseThrow(stroke, stroke.samples, stroke.width);
+    const read = point && readStroke(stroke, stroke.samples, stroke.width);
     cancelAnimationFrame(pending);
     pending = 0;
     stroke = null;
     if (field.hasPointerCapture(event.pointerId))
       field.releasePointerCapture(event.pointerId);
-    if (point) land(point, held, geo);
+    if (point) land(point, held, geo, read);
     else {
       reset();
-      hint("Swipe up at least ⅓ board width");
+      hint("Flick further up to throw");
     }
   };
   field.onpointercancel = field.onlostpointercapture = (event) => {
