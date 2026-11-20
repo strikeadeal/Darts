@@ -45,6 +45,8 @@ const layouts = [
   { size: "320×568", board: 288, bottom: 544, cx: 160, frame: [0, 20, 320] },
   { size: "667×375", board: 293.5, bottom: 387, cx: 319.5, frame: [0, 0, 667] },
   { size: "852×393", board: 302, bottom: 387, cx: 409, frame: [59, 0, 793] },
+  // The iPhone 14 Pro's own landscape insets (0, 20, 59, 59), read on the phone.
+  { size: "852×393 measured", board: 303, bottom: 388.5, cx: 409, frame: [59, 0, 793] },
 ];
 
 test("every bed is reachable from the dart on the smallest screens", () => {

@@ -21,8 +21,12 @@ export function fullHeight({ standalone, innerWidth, screenWidth, screenHeight }
   return null;
 }
 
-// Set --vh from the screen. Returns true when it changed, so callers can
-// re-measure anything laid out from it.
+// Set --vh from the screen, and make the document that tall too. On the phone
+// (iOS 27, 393×852) WebKit painted and hit-tested only as far as the document
+// reached: a fixed room 852 tall still stopped at the 793 px document, while in
+// landscape, where the document was full height, it painted past a short
+// innerHeight. Returns true when it changed, so callers can re-measure anything
+// laid out from it.
 export function fitScreen() {
   const root = document.documentElement;
   const h = fullHeight({
@@ -39,5 +43,6 @@ export function fitScreen() {
   if (root.style.getPropertyValue("--vh") === value) return false;
   if (value) root.style.setProperty("--vh", value);
   else root.style.removeProperty("--vh");
+  root.style.height = value; // "" falls back to the stylesheet's 100%
   return true;
 }

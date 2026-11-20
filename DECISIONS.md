@@ -340,3 +340,49 @@ WebKit isn't installed in this environment, so the earlier WebKit figures weren'
 - **Touches below the old edge.** Touch the floor in the bottom 60 pt. The `touch` row should show a y above 793.
 - **Turn it off** with the same five taps.
 - **The other phones.** Check a notchless phone (SE) and a notched one if available, and a Safari tab to confirm it is unchanged.
+
+### On the phone · first readout
+
+The first fix shipped in #12. The readout was screenshotted on the reporting iPhone 14 Pro, installed app, after Update game. The user agent says iOS 18.7, but that is the OS token Safari has frozen since iOS 26; the phone runs iOS 27.2.
+
+| Value | Portrait | Landscape |
+|---|---|---|
+| `screen` | 393×852 @3 | 393×852 |
+| `innerWidth×innerHeight`, `visualViewport` | 393×793 | 852×334 |
+| `documentElement.clientWidth×clientHeight` | 393×793 | 852×393 |
+| `100%` / `100dvh` / `100svh` | 793 / 793 / 793 | 334 / 334 / 393 |
+| `100vh` / `100lvh` | 852 / 852 | 393 / 393 |
+| Safe areas (top, bottom, left, right) | 59, 34, 0, 0 | 0, 20, 59, 59 |
+| `--vh`, scene | 852, 0–852 | 393, 0–393 |
+
+- **Confirmed.**
+  - **The shortfall.** The layout viewport is 59 px (the portrait top inset) short in portrait, and the visual viewport is 59 px short in landscape too.
+  - **The decision code** worked as designed: `navigator.standalone` was true, and `--vh` was 852, then 393 after rotation, then back to 852.
+  - **Updates.** It was refreshed on rotation, return from the background and focus, all logged.
+  - **Insets** are correct.
+  - **`100vh` and `100lvh` are full height on this phone.** That holds for these readings only.
+- **Landscape fills the screen.** Before the fix, the board and grip came from `100dvh` (334) there, so landscape was also squeezed.
+- **Portrait still stopped at 793.**
+  - The room was laid out to 852, but nothing painted below 793. The amber bar at `--vh` was invisible, and the cyan bar at the layout viewport's bottom sat on the edge of the dark band.
+  - Touches below 793 produced no event at all. The lowest logged was at 792.
+- **What tells the two apart.** In landscape the document was 393 tall (`clientHeight`) and painting reached 393, past a 334 px `innerHeight`. In portrait the document was 793 tall and painting stopped at 793. WebKit paints and hit-tests the installed app only as far as the document reaches, and a fixed layer taller than the document is cut off at the document's bottom.
+
+**Second fix.**
+- **The document is now screen height too.** `src/viewport.js` sets `html { height }` to `--vh` along with `--vh`. The root keeps `overflow: hidden`, so a document taller than the layout viewport still can't be scrolled.
+- **Reach.** The reach test gained the phone's measured landscape layout (bottom inset 20, board 303 px).
+- **Re-measured.** Tip error, 9 swipes per layout in the Chromium model:
+  - 0.000020 CSS px at 393×852 laid out at 793;
+  - 0.000019 at 320×568 laid out at 548;
+  - 0.000017 at 852×393 with the measured insets;
+  - 0.000019 at 667×375;
+  - 0.000019 in a Safari tab.
+- **No `tune` change.**
+
+**The readout as an experiment.** Its new **Fix** button switches live between three ways of reaching the bottom, and the choice persists:
+- `doc`: the document is `--vh` tall. This is shipped.
+- `fixed`: the first fix alone.
+- `flow`: the root left `overflow: visible`, with a normal-flow body at least `--vh` tall.
+
+New rows show the document's height and scroll position. Touches are logged as both pointer and touch events, in case WebKit sends one without the other.
+
+**If `doc` fails on the phone,** the band is outside anything the page can draw. That would mean the web view itself ends at 793. The remaining lever is the status-bar style: dropping `black-translucent` makes iOS reserve the top 59 px as a status bar band. That trades the dead band for an opaque top bar and needs every player to reinstall. That isn't decided until the readout rules out the page-side fixes.
