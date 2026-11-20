@@ -3,20 +3,17 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-permissions:
-  actions: read
-  contents: read
-  pages: write
-  id-token: write
 concurrency:
   group: pages
   cancel-in-progress: false
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.release.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: read
+    outputs:
+      artifact_name: ${{ steps.package.outputs.name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,26 +22,26 @@ jobs:
       - run: npm test
       - run: npm run build
       - uses: actions/configure-pages@v5
+      # A full rerun uploads a new artifact. A deploy-only retry reuses this name.
+      - name: Name Pages artifact
+        id: package
+        run: echo "name=github-pages-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-pages-artifact@v3
-        id: upload
         with:
+          name: ${{ steps.package.outputs.name }}
           path: dist
-      - name: Wait for Pages artifact
-        timeout-minutes: 2
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
-        run: |
-          for delay in 0 1 2 4 8 16 32; do
-            sleep "$delay"
-            if artifact_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" \
-              --jq 'select(.name == "github-pages" and .expired == false) | .id' 2>/dev/null) &&
-              [ "$artifact_id" = "$ARTIFACT_ID" ] && [ -n "$artifact_id" ]; then
-              echo "Pages artifact $artifact_id is available."
-              exit 0
-            fi
-          done
-          echo "::error::Pages artifact $ARTIFACT_ID was not visible after upload."
-          exit 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.release.outputs.page_url }}
+    steps:
       - id: release
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: ${{ needs.build.outputs.artifact_name }}
