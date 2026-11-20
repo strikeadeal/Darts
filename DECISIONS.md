@@ -242,3 +242,101 @@ This held in WebKit and Chromium at 390×844, 320×568 and 852×393. The even-wi
 - **Grab feel.** Whether the target is forgiving enough at arm's length, whether the pulse and amber cue read as "touch here", and whether a touch on the dart during a dolly-in picks it up.
 - **The flight.** That the compositor-driven path and the main-thread fin roll stay in step, with no visible lag between dart and shadow.
 - **Board shadow and resting dart:** the board shadow looks the same as the old filtered one, and the resting dart is sharp. The board's `will-change` layer's memory on a 2× SE, roughly 1.3 MB.
+
+## Full screen in the installed app · 20 November 2026
+
+**The symptom.** On an iPhone 14 Pro (393×852 pt, Dynamic Island) on iOS 27.2, the installed app stopped short of the bottom of the screen. The room, floor and lane ended early, and a dead dark band filled the bottom. The throw control and its hint sat well above the home indicator.
+
+### Cause
+
+**Confirmed from the screenshot's geometry.** The page is laid out in a viewport about 793 pt tall, 59 pt (the top safe area) short of the 852 pt screen, while still drawn from the top of the screen.
+- **The model.** `scripts/check/viewport.cjs` opens the build in a 393×793 window, reports a 393×852 screen, sets `navigator.standalone`, and applies insets of 59 top and 34 bottom.
+- **The old build in that model.** The hint's second line ends at 747 pt (the line box; its glyphs end a few points higher). The screenshot shows about 743 pt.
+- **In a full 852 pt viewport,** the same line ends at 806 pt. The old build's numbers match the screenshot only in the short viewport.
+- **What the band is.** Everything sized from that viewport stops at 793 pt: `--sh` and `--grip` (both from `100dvh`), `.scene` and `#panel` (`position: fixed; inset: 0`), and the help sheet (a modal `<dialog>` with a bottom margin of 0). Below that is the root background, which is the band.
+
+**Why it happens (reported, not yet measured on this phone).** Several developers report the same failure in iOS 26 and 27 installed web apps that use `viewport-fit=cover` with a `black-translucent` status bar. It is referenced as WebKit bug 301108, which I couldn't open from here. The reports agree that `100%`, `100vh`, `100dvh`, `innerHeight` and fixed `inset: 0` can come out short by roughly the top inset. They conflict on the details:
+- The shortfall was 47 px on one device and 62 px on another. One device reported `env(safe-area-inset-top)` as 0 while the gap was still there.
+- `100lvh` was full height in two simulator and emulation reports. No report measured it on a device, and WebKit 316008 reports `lvh` wrong in a nearby configuration (without the status-bar meta tag).
+- One report saw rotating to landscape and back clear the gap. Another saw no change.
+- A Safari tab is not affected.
+
+**Why the earlier checks missed it.** Desktop emulation sets the window to the screen size, so the layout viewport is always the full screen. The iPhone 17 simulator check in "Room verification" also ran iOS 27.2 and reported "the room filled the standalone screen", but it recorded no measurement. The band is near-black next to a vignetted dark floor, so a visual check can miss it. Whether the simulator reproduces the bug is unknown.
+
+### Fix
+
+- **One height for the screen, `--vh`.** CSS defaults it to `100dvh`, which is right in a Safari tab.
+- **The installed iPhone app sets it from the screen.** `src/viewport.js` `fullHeight()` returns the screen's height when two things hold:
+  - The page is an iOS home-screen app: `navigator.standalone`, or display-mode standalone where that WebKit-only property exists.
+  - The window spans the screen's width.
+  - Because iOS keeps `screen.*` in portrait order, portrait takes the long side and landscape the short one. An installed iPhone app always fills the screen, so this needs no unit or inset WebKit might get wrong.
+  - Anything else gets `null` and keeps the CSS default: Safari tabs, iPad Split View or Stage Manager windows, Android and desktop installs.
+- **Everything screen-sized goes through `--vh`:**
+  - `--sh` and `--grip`, and so the board width, its position and the grip;
+  - `.scene` and `#panel`, now `inset: 0 0 auto; height: var(--vh)` rather than `inset: 0`;
+  - the help and switch sheets, with `bottom: calc(100% - var(--vh))`, which moves the dialog's bottom from the layout viewport's to the screen's and is 0 wherever the two agree;
+  - the sheets' and landscape cards' `max-height`.
+  - The backdrop overshoots by 128 px, because `::backdrop` can't read custom properties on iOS 16.
+  - `tests/viewport.test.js` fails if a viewport unit or `inset: 0` comes back on those layers.
+- **Changes while the app is open.** `--vh` is set before the first render. It is checked again on `resize`, `orientationchange`, `pageshow` and a return from the background, then once more a frame later in case iOS reports the new width late. A change cancels any held aim, which re-measures the resting dart, as a resize already did.
+- **Opening and closing a dialog** changes neither the screen nor the window width, so it can't move the room. The dialog's own offset follows the layout viewport live.
+- **The floor and lane now reach the bottom edge.** The floor plane already projected past the screen; only the scene's clip cut it off. The throw control keeps its place, `--bottom + 6px` above the screen's bottom, so the hint sits just clear of the home indicator. The cards keep a 12 px gutter above it.
+
+**Rejected alternatives.**
+- **`calc(100dvh + env(safe-area-inset-top))`.** The reported shortfall doesn't always equal the inset, and the inset itself has read 0. It would also double-count once Apple fixes the bug.
+- **`100lvh` in standalone.** The only evidence is simulator and emulation runs, and it has been reported wrong nearby. It also doesn't move fixed elements or dialogs, whose offsets are measured from the short viewport.
+- **Dropping `black-translucent`.** This swaps a dead band at the bottom for an opaque status bar at the top, which one project tried and then reverted. iOS reads the tag at install time, so every player would also have to reinstall.
+- **`-webkit-fill-available`, `innerHeight`, `visualViewport.height` and `clientHeight`.** All have been reported short.
+- **Moving the room into normal flow.** One report measured a normal-flow `min-height: 100vh` element at full height. But the room, cards and dialogs are fixed overlays and the top layer, and they still need the real height as a number.
+
+### iOS versions
+
+- **iOS 16.4–18.** The layout viewport is already the screen, so JS sets the same value CSS would. Nothing changes.
+- **iOS 26–27 with the bug.** The room fills the screen.
+- **Once WebKit fixes it,** the screen height and the viewport agree again, and the dialog offset returns to 0. Nothing needs removing.
+- **The known limit.** This assumes the installed app is drawn under the status bar, which `black-translucent` asks for.
+  - If a future iOS stops drawing under it, as Apple suggested for pages without the tag in WebKit 317153, the room would overrun the bottom by the status bar's height.
+  - The readout below shows that directly as the amber and cyan rules parting.
+  - The fix would then be to drop `--vh` back to the CSS default when `innerHeight` matches the window.
+- **Display Zoom** scales `screen.*` and the viewport together, so it's unaffected.
+
+### Throw, re-measured
+
+The fix gives the installed app the layout the earlier audits measured at full screen size. In the short-viewport model, every value matches a true full-size window: board width, dart position and grip.
+- **Board widths** in the smallest layouts are 288 px (320×568), 293.5 px (667×375) and 302 px (852×393).
+- **The touch target's lowest point** is 544, 387 and 387 px. These are exactly the figures in `tests/grab.test.js`, so the reach test still holds on the smallest screen in each orientation.
+- **The phone in the report** (393×852) keeps its 353.7 px board.
+- **Its grip** grows from 118.4 px (the short viewport) to 145.1 px, and the whole throw control drops 59 px. The extra height above the finger adds room to reach.
+- **The hand pose.** The resting dart's `handScale` there falls from about 1.2 to 1. The shaft is no longer turned further into depth to make up for a cramped grip; this is the pose the layout was designed and tested with at this size.
+- **No `tune` value changed.**
+
+**Tip alignment.** Measured by pausing each flight at its end and projecting the saved point through the board plane, nine varied swipes per layout, Chromium. Largest tip error:
+
+| Layout | Largest tip error (CSS px) |
+|---|---|
+| 393×852, laid out at 793 | 0.000021 |
+| 320×568, laid out at 548 | 0.000015 |
+| 852×393 notched landscape | 0.000018 |
+| 667×375 | 0.000014 |
+| Safari tab, 393×659 | 0.000016 |
+
+WebKit isn't installed in this environment, so the earlier WebKit figures weren't repeated.
+
+### Verification
+
+- **Automated.** All 21 Node tests pass. The three new ones cover the height decision (portrait, landscape, notchless, Safari tab, iPad window, bad values) and the stylesheet rule. The build precaches 22 assets, adding `src/viewport.js` and `src/probe.js`.
+- **Desktop emulation (Chromium).**
+  - **The short-viewport model** at 393×793 on 393×852 and at 320×548 on 320×568: the scene, panel, throw control and help sheet now end at the screen's bottom (852 and 568) instead of the layout viewport's (793 and 548). The help sheet's bottom moved from 793 to 852.
+  - **Landscape** at 852×393 and 667×375 is unchanged and correct. **A Safari tab** keeps `100dvh`.
+  - **Matches.** Full matches with the existing runner: a touch solo at 393×852, a reduced-motion touch duel at 852×393, a keyboard solo at 320×568 and a reduced-motion keyboard duel at 375×667, all with no errors.
+  - **The readout** opens, persists across a reload and toggles off.
+- **Not run.** There was no Mac, no iOS simulator and no iPhone in this session, so nothing here comes from real iOS. The service-worker update and offline paths were not re-run. The change touches no worker or storage code, and the two new files are in the precache.
+
+**Still to check on the phone,** after this is deployed and Update game has applied it:
+- **The readout.** Open **How to play**, tap the title five times, close the sheet and screenshot.
+  - Expected: `standalone true`, screen `393×852`, `--vh 852 (852px)`, scene `0–852`, and amber and cyan rules meeting at the bottom edge.
+  - Those numbers confirm the cause directly: `inner`, the `units` row and `safe` show what this iOS build reports.
+- **Lifecycle.** Screenshot again after rotating, after going to the home screen and back, and after opening and closing How to play. The last six lines log each event.
+- **Touches below the old edge.** Touch the floor in the bottom 60 pt. The `touch` row should show a y above 793.
+- **Turn it off** with the same five taps.
+- **The other phones.** Check a notchless phone (SE) and a notched one if available, and a Safari tab to confirm it is unchanged.

@@ -98,8 +98,13 @@
   --left: env(safe-area-inset-left, 0px);
   --right: env(safe-area-inset-right, 0px);
   --gutter: 12px;
+  /* The screen's height. A Safari tab's toolbars come and go, so 100dvh. The
+     installed app's layout viewport can stop a status bar short of the screen
+     (iOS 26+), so src/viewport.js sets --vh from the screen there, and the room
+     and cards are sized from --vh, never from 100%, inset: 0 or innerHeight. */
+  --vh: 100dvh;
   --sw: calc(100vw - var(--left) - var(--right));
-  --sh: calc(100dvh - var(--top) - var(--bottom));
+  --sh: calc(var(--vh) - var(--top) - var(--bottom));
   --plate-h: 82px;
   --zone: 168px; /* minimum throw zone under the board */
   --b: min(
@@ -111,7 +116,7 @@
   --cy: calc(var(--top) + var(--plate-h) + 14px + var(--b) / 2);
   --grip: clamp(
     54px,
-    calc((100dvh - var(--bottom) - var(--cy) - var(--b) / 2) * 0.47),
+    calc((var(--vh) - var(--bottom) - var(--cy) - var(--b) / 2) * 0.47),
     150px
   );
 }
@@ -187,7 +192,8 @@ p {
 /* ───────────────────────── The room ───────────────────────── */
 .scene {
   position: fixed;
-  inset: 0;
+  inset: 0 0 auto;
+  height: var(--vh);
   /* clip, not hidden: the projected floor and flights overflow the frame, and
      a scroll container could be scrolled out from under the camera. */
   overflow: hidden;
@@ -798,7 +804,8 @@ p {
 }
 #panel {
   position: fixed;
-  inset: 0;
+  inset: 0 0 auto;
+  height: var(--vh);
   z-index: 2;
   pointer-events: none;
 }
@@ -1084,10 +1091,13 @@ p {
 
 /* ───────────────────────── Sheets ───────────────────────── */
 dialog {
+  /* A modal sits in the layout viewport. Move its bottom down to the screen's
+     (0 wherever the two agree). */
+  bottom: calc(100% - var(--vh));
   margin: auto auto 0;
   width: min(480px, 100%);
   max-width: 100%;
-  max-height: calc(100dvh - var(--top) - 10px);
+  max-height: calc(var(--vh) - var(--top) - 10px);
   overflow: auto;
   padding: 20px calc(22px + var(--right)) calc(22px + var(--bottom))
     calc(22px + var(--left));
@@ -1103,6 +1113,8 @@ dialog[open] {
   animation: rise var(--ui-in) ease-out;
 }
 dialog::backdrop {
+  /* Past any status-bar shortfall; ::backdrop can't read --vh on iOS 16. */
+  bottom: -128px;
   background: #050605a8;
 }
 .sheet-head {
@@ -1233,7 +1245,7 @@ dialog::backdrop {
     left: auto;
     right: calc(var(--right) + var(--gutter));
     width: min(380px, 46vw);
-    max-height: calc(100dvh - var(--top) - var(--bottom) - 64px);
+    max-height: calc(var(--vh) - var(--top) - var(--bottom) - 64px);
     overflow: auto;
   }
   .mode {
