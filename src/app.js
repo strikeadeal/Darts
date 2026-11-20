@@ -298,9 +298,8 @@ function probeTap(event) {
   import("./probe.js").then(({ toggleProbe }) => {
     let on = true;
     try {
-      on = localStorage.getItem(probeKey) !== "1";
-      if (on) localStorage.setItem(probeKey, "1");
-      else localStorage.removeItem(probeKey);
+      on = localStorage.getItem(probeKey) === null; // set by the readout while on
+      if (!on) localStorage.removeItem(probeKey);
     } catch {
       /* On for this session only. */
     }
@@ -308,7 +307,7 @@ function probeTap(event) {
   });
 }
 try {
-  if (localStorage.getItem(probeKey) === "1" || /[?&]viewport\b/.test(location.search))
+  if (localStorage.getItem(probeKey) !== null || /[?&]viewport\b/.test(location.search))
     import("./probe.js").then(({ toggleProbe }) => toggleProbe(true));
 } catch {
   /* No readout. */
