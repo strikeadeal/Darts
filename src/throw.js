@@ -24,11 +24,11 @@ export const tune = {
     reach: 40, // mm higher per board width of extra stroke length
     aim: 6.9, // mm sideways per degree the stroke leans from straight up
     flickSteer: 0.25, // share of the line set by the release direction; the rest by the whole stroke
-    sensitivity: 1.1, // multiplies height, reach and aim: up is sharper, down more forgiving
+    sensitivity: 0.88, // multiplies height, reach and aim: up is sharper, down more forgiving
     // Stroke quality. Each fault past its free allowance adds a miss of this
     // many mm, in a direction seeded by the stroke itself.
-    slow: 0.75,
-    fast: 10, // the comfortable release speeds: the board spans about 1 to 8
+    slow: 0.6,
+    fast: 13, // the comfortable release speeds: the board spans about 0.8 to 10
     outside: 40, // mm per doubling of speed outside them
     bend: 2.5, // % of its length the path may bow from straight
     bendCost: 6, // mm per % beyond

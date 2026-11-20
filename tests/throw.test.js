@@ -87,7 +87,7 @@ test("release speed sets the height; stroke length only nudges it", () => {
   const quick = throwPath([start, [210, 0, -0.06], end]);
   const even = throwPath([start, [210, 0, -0.348], end]);
   assert.equal(scoreAt(even.x, even.y).points, 50);
-  assert.ok(quick.y < even.y - 100 && quick.x === 0);
+  assert.ok(quick.y < even.y - k * g.height && quick.x === 0); // more than a doubling higher
   assert.ok(quick.pace > 0.3 && Math.abs(even.pace) < 1e-9);
   assert.deepEqual(throwPath([start, [210, 0, -0.06], end]), quick);
 });
@@ -115,7 +115,7 @@ test("a pause before letting go is a fault that grows with the pause, not a soft
   // Sliding to a spot and stopping (pointer aiming) lands far short and is marked.
   const slide = [[0, 0, 0], [150, 0, -0.5], [300, 0, -0.6], [450, 0, -0.6]];
   const stop = throwPath(slide);
-  assert.equal(scoreAt(stop.x, stop.y).points, 0);
+  assert.ok(Math.hypot(stop.x, stop.y) > 120, "well off the slide's aim");
   assert.ok(readPath(slide).faults.slowdown > 0);
 });
 

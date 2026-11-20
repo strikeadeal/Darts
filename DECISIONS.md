@@ -610,15 +610,15 @@ Players say the throw is too easy. This section supersedes "Identical releases s
 
 Everything below is in `tune.input` in `src/throw.js`. Lengths are board widths and speeds are board widths per second, so the feel is the same on every iPhone and orientation.
 
-- **Release speed sets the height.** A clean release lands `height × sensitivity` (104.5 mm) higher for each doubling of its speed. The curve is logarithmic because a person's speed error grows with the speed (a fast flick is off by about as many percent as a slow one), so on a log curve the spread in millimetres is the same at every height. With a short stroke the bottom double needs a soft flick of about 1 board width per second; with a long one the top double needs about 7.7. The bull at the calibrated length needs `cruise` (2.8).
-- **Stroke length is a small nudge.** `reach × sensitivity` is 44 mm per board width: half as long again moves the dart 13 mm, against 104.5 mm for a doubling of speed. It stays small on purpose: a 60 Hz screen only knows where the finger was up to a frame before it lifted, so any position-based height inherits that frame as noise (below).
+- **Release speed sets the height.** A clean release lands `height × sensitivity` (83.6 mm) higher for each doubling of its speed. The curve is logarithmic because a person's speed error grows with the speed (a fast flick is off by about as many percent as a slow one), so on a log curve the spread in millimetres is the same at every height. With a short stroke the bottom double needs a soft flick of about 0.8 board widths per second; with a long one the top double needs about 10. The bull at the calibrated length needs `cruise` (2.8).
+- **Stroke length is a small nudge.** `reach × sensitivity` is 35 mm per board width: half as long again moves the dart 11 mm, against 84 mm for a doubling of speed. It stays small on purpose: a 60 Hz screen only knows where the finger was up to a frame before it lifted, so any position-based height inherits that frame as noise (below).
 - **Calibration.** A straight stroke of `bullRise` (60% of the board width) released at `cruise` still hits the bull exactly.
-- **The line.** The stroke's overall direction sets it at `aim × sensitivity` (7.59 mm per degree from straight up), so line and height are independent: a longer or faster stroke doesn't also move sideways. The direction of the release takes `flickSteer` (25%) of the line, so a late sideways flick still trims it. Once that flick bends the path past the free allowance, it is a fault.
+- **The line.** The stroke's overall direction sets it at `aim × sensitivity` (6.07 mm per degree from straight up), so line and height are independent: a longer or faster stroke doesn't also move sideways. The direction of the release takes `flickSteer` (25%) of the line, so a late sideways flick still trims it. Once that flick bends the path past the free allowance, it is a fault.
 - **How the release is read.** Speed and direction are measured over the last `window` (0.15) board widths of travel, with the window's start interpolated between samples. A slow stroke is timed over longer and a fast one over less. The pointerup repeats the finger's last position, so the lift happened somewhere between the last move and the pointerup; the reading carries the stroke on to the middle of that gap (at most `liftMs`/2). A finger that rested within `stillPx` of where it lifted, for longer than a lift takes, had stopped there: the speed is the flick's, and the rest is a pause.
 - **Stroke quality.** Three measured faults, each free up to an allowance and then costing millimetres:
   - **Bend:** the path's furthest point from a straight line, as a share of its length. 2.5% free, then 6 mm per percent.
   - **Slowdown:** the largest fall in speed from its peak before the lift, a pause counting in full. 10% free, then 1.5 mm per percent. A pause of 40 ms costs about 50 mm.
-  - **Speed outside 0.75–10 widths/s:** 40 mm per doubling beyond. The board needs about 1–8, so this only catches extreme strokes.
+  - **Speed outside 0.6–13 widths/s:** 40 mm per doubling beyond. The board needs about 0.8–10, so this only catches extreme strokes.
 - **The miss.** A stroke misses its release point by exactly the sum of its faults, in a direction drawn from a seed. Within the allowances the miss is zero.
 - **The prompt coaches.** After a throw whose biggest fault cost 6 mm or more, the next dart's prompt says what to fix: "Keep the stroke straight", "Let go while still flicking", "Too hard · flick softer" or "Too soft · flick harder". After a clean throw that left the board, it says which way: "Too high · flick softer", "Too low · flick harder" or "Too wide · straighten your line". Screen readers hear it after the score. It is not shown after a visit's last dart, when the hand-off card is up.
 - **Unchanged.** Validity is the same: upward travel of at least a third of the board width and the same slope rule, so short, sideways and downward strokes still cost nothing. The flight takes `pace` (now log speed between `cruise` and `fast`) and `line` exactly as before, so a hard flick still flies flatter and quicker (202–270 ms). The tip still ends on the saved point, and `flyDart`, `entryPose`, `scoreAt`, the grab rule, the room, the layout, the rules of both games, `dartshift.save.v1`, `dartshift.301.v1` and `dartshift.resume` are untouched.
@@ -717,8 +717,8 @@ The keyboard throw keeps its exact aim. It is the way to play for anyone who can
 
 All in `tune.input`. Change one value at a time and play a few visits.
 
-- **Too hard overall:** `sensitivity` 1.1 → 1.0 first. That undoes change 3: in the model the casual profile's ten-round 301 finishes go back up to 66% and the skilled profile scores 293. Then `height` down (95 → 85) if clean flicks still spread too much up and down. `npm test` fails if the top or bottom double drops out of comfortable reach.
-- **Too easy:** `sensitivity` up (1.2), or `height` up a little. To punish sloppy strokes more without touching clean ones, raise `bendCost` and `slowdownCost`.
+- **Too hard overall:** `sensitivity` is already down to 0.88 (see "Sensitivity cut" below). Lowering it further makes the end doubles need more extreme speeds, so widen `slow` and `fast` with it; `npm test` fails if the top or bottom double drops out of comfortable reach. Lowering `bendCost` and `slowdownCost` instead eases sloppy strokes without touching clean ones.
+- **Too easy:** `sensitivity` back up (1.0, or 1.1 as first tuned; at 1.1, `slow` 0.75 and `fast` 10 were enough), or `height` up a little. To punish sloppy strokes more without touching clean ones, raise `bendCost` and `slowdownCost`.
 - **Too random:** watch the prompt.
   - "Let go while still flicking" after flicks that felt clean: raise `slowdown` (10 → 15). If it follows quick flick-and-lifts, also raise `liftMs` (20 → 30): it would mean iOS reports the lift later than modelled.
   - "Keep the stroke straight" on your natural thumb arc: raise `bend` (2.5 → 3.5).
@@ -733,6 +733,28 @@ All in `tune.input`. Change one value at a time and play a few visits.
 - `src/app.js`: the How to play steps, the prompt's second line ("Faster flies higher · keep it straight"), the round and screen-reader text, coaching, and records.
 - `src/game.js`: the flick records.
 - Not shipped: `scripts/model/` (the stroke model, the vendored old model and the contribution runs) and `scripts/check/flick.cjs`. The build still precaches 22 assets.
+
+## Sensitivity cut · 20 November 2026
+
+`sensitivity` 1.1 → 0.88 (a 20% cut, on request; 12% below the 1.0 the flick started from). Every clean landing moves 20% less for the same change of speed, length or angle: 83.6 mm per doubling of speed, 6.07 mm per degree.
+
+- **The speed range widened with it.** At 0.88 the top double on the 320×568 screen needs a flick of about 10 widths/s and the bottom double about 0.8, outside the comfortable range the reach test allows (1.2× `slow` to 0.8× `fast`, then 0.9–8). `slow` 0.75 → 0.6 and `fast` 10 → 13 put them back inside. In the model this barely moves the numbers (casual Nine Dart Rush 160 with it, 167 without, inside quick-run noise): the easing comes from the sensitivity.
+- **Two tests restated** where they fixed the old scale rather than behaviour: the quick finish must land more than one doubling (`height × sensitivity`) above the steady one, not a fixed 100 mm; and slide and stop must land more than 120 mm from the bull rather than off the board (it now lands 154 mm out, on single 7, with a 113 mm slowdown fault).
+
+| Profile | Bull | T20 | D20 | D16 | Nine Dart Rush | 301 darts (mean / median) | 301 within 10 rounds |
+|---|---|---|---|---|---|---|---|
+| Casual, before the flick | 6.8% | 10.5% | 13.8% | 19.1% | 199 | 21.0 / 19 | 89.6% |
+| Casual, ×1.1 | 2.5% | 6.2% | 9.2% | 8.5% | 139 | 31.1 / 28.5 | 57.9% |
+| Casual, ×0.88 | 4.3% | 8.3% | 12.4% | 11.6% | 155 | 25.6 / 23.5 | 76.6% |
+| Skilled, before the flick | 36.2% | 40.5% | 41.3% | 50.0% | 319 | 10.4 / 10 | 100% |
+| Skilled, ×1.1 | 21.4% | 29.8% | 31.4% | 32.1% | 276 | 12.8 / 12 | 99.9% |
+| Skilled, ×0.88 | 31.1% | 37.1% | 38.3% | 40.3% | 314 | 11.2 / 11 | 100% |
+
+- **Gap,** skilled over casual: Nine Dart Rush 2.03 (×1.1: 1.99, before: 1.60); 301 darts 2.29 (2.43, 2.02); T20 4.47 (4.81, 3.86).
+- **Still a flick.** Slide and stop never reaches T20. 98.5% of skilled T20 strokes and 46.4% of casual ones are clean.
+- **First-time players.** 99% of darts 1–15 land on the board; the median miss falls from 54 mm at dart 1 to about 31 by dart 9.
+- **Touch noise alone** at 60 Hz is now up to 3.1 mm in height at D20 (×1.1: 2.7): the top double needs a faster, shorter flick, and the screen sees fewer frames of it. 60 and 120 Hz agree within 1.2 mm on average.
+- **Targets now** (set for ×1.1): casual Nine Dart Rush ≤ 160, ten-round 301 ≥ 60%, every skilled target and the Nine Dart Rush and 301 gaps hold. Casual bull, T20, D20 and 301 darts, the T20 gap (4.47 against 5), the first-time learning ratio (0.57 against 0.5) and the 3 mm touch-noise limit (3.1) are missed. That is the expected price of a cut this size: the casual game is easier than at ×1.1 but still harder than before the flick on every measure, and the skilled player is back near where they were.
 
 ## The flick verification · 20 November 2026
 
