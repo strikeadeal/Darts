@@ -183,15 +183,15 @@ let refocus = false;
 // `keep` is a board already on screen (see landing). The rest of the field is
 // updated in place around it, so the board and room are never rebuilt.
 function render(shot, world, overlay = "", keep = null) {
-  later?.stop();
-  later = null;
   const active = document.activeElement;
   // Focus lost with the old controls goes to the new ones. A landing that ends
   // a visit has no control until its card arrives after the hold, so it waits.
   const lost =
     refocus || (active && (stage.contains(active) || panel.contains(active)));
-  cancelAim();
+  cancelAim(); // may land a dart in flight, which queues its next step: drop it
   cancelAim = () => {};
+  later?.stop();
+  later = null;
   shoot(shot);
   if (keep) {
     const field = keep.parentElement,
@@ -487,16 +487,16 @@ function land(point, held, geo) {
       a.pause();
       a.currentTime = 0;
     }
+    say(
+      hit.label +
+        ", " +
+        hit.points +
+        " points." +
+        (s.complete ? " Match complete." : ""),
+    );
     defer(() => {
       play(effect);
       if (hit.points >= 40) moment("flare");
-      say(
-        hit.label +
-          ", " +
-          hit.points +
-          " points." +
-          (s.complete ? " Match complete." : ""),
-      );
     });
   }
   cancelAim = showLanding;

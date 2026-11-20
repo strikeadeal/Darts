@@ -131,3 +131,114 @@ A WebGL engine would add another rendering context, asset pipeline and offline p
   - The whoosh and fanfare with the silent switch and different audio routes.
   - iOS 16.4 itself. The CSS relies on `round()` (Safari 15.4), `dvh` (15.4) and `overflow: clip` (16).
   - The public Pages deployment was not exercised.
+
+## Grab and flight · 20 November 2026
+
+Two problems: a throw could start anywhere on the playfield, and players said a thrown dart's flight lagged. This section supersedes "start a stroke anywhere inside the playfield" in the original Throw decision.
+
+### Gesture
+
+- **A stroke starts only on the dart.** The target is the dart's painted outline at rest, grown by 12 px on every side and never under 48 px across (`tune.grab` in `src/throw.js`, tested in `tests/grab.test.js`). The painted dart is at least 40×83 px (320×568), so the target is 64×107 px there and 64–75 px wide everywhere. That clears the 44 px iOS minimum without reaching the board or the floor beside the dart.
+- **Pickup.** Touching the dart draws it back into the existing hand pose and dims the prompt, so the finger clearly has it. The dart's resting drop shadow is dropped at the same moment (see Lag).
+- **A touch elsewhere** costs nothing and never throws. The prompt turns amber with "Touch the dart to pick it up" (also announced to VoiceOver) and the dart pulses once. A touch that is spent finishing a camera move or effect gets no cue, so tapping to skip stays quiet.
+- **After a skipped camera move.** The room's capture-phase handler now rewinds the running moves to their start, notes where the dart was, then finishes them. The target spans from there to where the dart settles, so a touch anywhere on the path the player saw the dart travel picks it up. A touch after the move has ended uses the settled dart only.
+- **No minimum flick speed.** Slow releases are already how a player aims lower ("ease off for a lower hit", and a pause before lifting drops 32 mm). A speed floor would turn that into a failed throw and make the game harder to learn.
+- **Every bed is reachable from the dart.** Measured in WebKit at all nine layouts with their safe-area insets, a stroke started at the lowest point of the target can reach the outer edge of the double ring at a neutral release, with no help from lift or trim. That is stricter than the calibrated extremes with maximum lift and trim. Spare room above the finger is at least 281 px in portrait (320×568) and 133 px in landscape (852×393); spare room to the side is at least 67 px (320×568). `tests/grab.test.js` fixes the smallest layout in each orientation, and fails if a change to `tune.input` puts a double out of reach.
+- **Unchanged.** No existing `tune` value changed. The release window, lift, trim, the 60% bull calibration and the keyboard throw are as they were.
+- **Copy.** The prompt reads "Flick the dart up". The how-to-play step, the round announcement and the screen-reader description say to touch the dart. The "too short" hint is now "Swipe up at least ⅓ board width": the old wording wrapped to two lines in portrait, which moved the dart 19 px, and ran 328 px wide in landscape, off the edge at 667×375.
+
+### Lag: what the profiler showed
+
+Headless WebKit on Linux paints on the CPU, as iOS does (iOS composites on the GPU). Its idle playfield runs at a clean 16 ms in both engines, so slower frames are the app's work. Chromium hid the problem: at 6× CPU slowdown its flight frames stayed at 16.7 ms because rasterisation runs off its throttled main thread. That is also why earlier desktop numbers looked fine. Each lead was tested by ablation, removing one thing and measuring nine throws in WebKit at 390×844 @2×, and by timing the APIs used during release and landing.
+
+| Lead | Verdict | Evidence (WebKit, before the fix) |
+|---|---|---|
+| Board `drop-shadow` re-rendered | **Confirmed, main cause** | Anything painting over the board (dart, shadow, landing) re-rendered the whole filtered board. Removing that filter alone: flight median 34 → 20 ms, p95 55 → 28 ms. Removing both filters: 16 / 21 ms. |
+| Dart re-rasterised with its filter | **Confirmed, minor** | Dart filter off alone: median 34 → 29 ms. Its filter-sized dirty rectangle was what dragged the board in. |
+| Approach shadow repaints a board-sized layer | **Confirmed, minor** | Shadow hidden: 34 → 29 ms. As a composited Web Animation it instead cost ~10 ms on the first frame (layer creation). |
+| Flying dart has no layer, repaints stage | **Confirmed** | Shares the board's backing store. Giving the static board its own layer then took ~20 ms off landings and 4 ms off the first frame. |
+| Release work before frame 0 | **Partly.** Work ruled out, timing confirmed | Release handler 2 ms in WebKit, 6.6 ms median at 6× in Chromium. `save()` ≤0.3 ms, `whoosh()` ≤0.3 ms, layout reads ≤2 ms. The harm was timing: the first frame took 52 ms, and `flyDart()` timed from release, so frame 1 was already ~22% into the flight. |
+| Impact rebuilds the stage | **Confirmed, largest single frame** | 188–201 ms per landing, 264 ms when a visit ended. Hiding the room alone cut it to 74 ms, because the rebuild repainted the room's masked gradients. At visit ends the delayed step-back camera move and handoff card cost another ~100 ms: they were created at impact, although they only start 420 ms later. |
+| Desktop measurements hid it | **Confirmed** | See above. |
+| Impact sound | Ruled out | Muting changed nothing. |
+
+### What changed
+
+- **Board shadow.** The board's `drop-shadow` filter is now a soft-edged ellipse (`.board-wrap::before`) painted once. The board has its own layer (`will-change: transform`) and is never repainted by a dart, shadow or callout. Pixel difference against the old filter at 390×844 @2×: mean 0.28/255, 0.11% of pixels over 16 levels.
+- **Dart shadow.** The dart keeps its drop shadow at rest only (`.throw-control:not(.held)`). A held or flying dart is never re-filtered.
+- **Flight driver.** The dart's path is a Web Animation of `transform`: 24 keyframes, linear between them, within 0.1 px of the curve. The compositor moves it even when the main thread is late, and its clock starts on the first frame that reaches the screen, so a late first frame delays the start rather than causing a jump. A rAF loop re-poses only the barrel and four fins (roll and pitch) from the animation's own time.
+- **Approach shadow.** It moved out of the board-sized `.board-objects` SVG into a 200-unit SVG at the impact point. It stays empty until it becomes visible at 75% of the flight, then the same loop moves and fades it. Arc, depth, roll, shadow approach and the pace-driven durations are unchanged.
+- **Measurement at pickup.** Geometry the flight needs is read at pickup (or the first aim key), after any camera move has finished, so release forces no layout. The hit is still saved with `save()` before the flight starts.
+- **Landing.** The board stays on screen. On the contact frame the only change is the new dart added to the board and the thrown dart hidden (its control's fade held at zero). One frame later the callout is added and the scoreboard and throw control are updated in place (`morph`), not rebuilt. The landing is announced at contact.
+- **Visit and match ends.** The hold before the camera steps back (`--hold`) moved from CSS delays into `src/app.js`. The step-back move, handoff card, results card and their room effects are now created when the hold ends, not at impact. A tap during the hold still skips it. One visible change: the results card now rises with the pull-back, 420 ms after the last dart, instead of at once.
+- **The capture-phase skip** leaves a dart in flight alone, and ignores finished animations.
+
+**Fixed along the way:**
+- The camera-arrival re-measure called `reset()` even mid-stroke. A stroke begun within about a second of a landing could be silently cancelled.
+- The resting dart's `handScale` mixed `getScreenCTM()` (which leaves out the room's perspective) with `getBoundingClientRect()`. During every dolly-in the dart was drawn 30% too large and popped smaller on arrival.
+- Keyboard focus now carries across the hold to the handoff card.
+- Leaving mid-flight no longer lets the deferred landing redraw the playfield over the lobby. That bug was found while testing this change.
+
+### Before and after
+
+Nine-throw solo runs in the strokes' fixed cycle (215, 120 and 380 ms strokes): 78–153 flight intervals per run. All numbers are in ms.
+- **Release to first frame:** the release event to the first rAF callback after the handler.
+- **First interval:** that first frame's own duration.
+- **Contact:** the worse of the two frames that render the landing.
+- **Next frame:** the frame that brings in the callout, scoreboard and next dart; in the old build, the frame after the rebuild.
+- **p95:** across the 600 ms after contact.
+- **"Over 25 ms":** the share of flight frames longer than 25 ms.
+
+| Run | Build | Release to first frame (median / max) | First interval (median / max) | Flight (median / p95 / max) | Flight frames over 25 ms | Contact (median / max) | Contact, visit end (median) | Next frame (median / max) | 600 ms after (p95 / max) |
+|---|---|---|---|---|---|---|---|---|---|
+| WebKit 390×844 | before | 5 / 15 | 47 / 57 | 30 / 48 / 57 | 66 / 78 | 187 / 349 | 222 | 41 / 210 | 187 / 349 |
+| | after | 11 / 19 | 16 / 19 | 16 / 19 / 23 | 0 / 135 | 19 / 29 | 16 | 35 / 53 | 35 / 65 |
+| WebKit 375×667 (SE) | before | 6 / 14 | 49 / 55 | 30 / 50 / 69 | 70 / 80 | 176 / 270 | 235 | 40 / 129 | 164 / 270 |
+| | after | 8 / 13 | 16 / 18 | 16 / 19 / 28 | 1 / 137 | 17 / 28 | 17 | 29 / 63 | 28 / 75 |
+| WebKit, 2-core quota | before | 6 / 25 | 80 / 106 | 53 / 84 / 106 | 41 / 49 | 346 / 481 | 399 | 74 / 100 | 349 / 481 |
+| | after | 15 / 21 | 20 / 28 | 16 / 20 / 37 | 3 / 139 | 22 / 37 | 22 | 51 / 89 | 56 / 98 |
+| Chromium, 4× slowdown | before | 11.7 / 14.8 | 16.7 / 16.7 | 16.7 / 16.7 / 16.8 | 0 / 151 | 16.7 / 33.4 | 16.7 | 16.7 / 16.7 | 16.7 / 33.4 |
+| | after | 11.4 / 15.4 | 16.7 / 16.7 | 16.7 / 16.7 / 16.8 | 0 / 143 | 16.7 / 16.8 | 16.8 | 16.7 / 16.7 | 16.7 / 16.8 |
+| Chromium, 6× slowdown | before | 12.1 / 22.2 | 16.7 / 16.7 | 16.7 / 16.7 / 16.8 | 0 / 153 | 33.4 / 66.6 | 49.9 | 16.6 / 33.4 | 16.8 / 66.6 |
+| | after | 12.8 / 25.8 | 16.6 / 16.7 | 16.7 / 16.7 / 16.8 | 0 / 145 | 16.7 / 16.7 | 16.7 | 16.7 / 33.3 | 16.8 / 33.4 |
+
+The release handler stayed small: 1–2 ms in WebKit; in Chromium at 6×, 5.1 ms median and 15.9 ms worst, against 6.6 ms and 17.5 ms before. It builds 24 keyframes where it used to read layout.
+
+**What is still over budget.** WebKit's frame after contact, which brings in the callout, scoreboard and next dart, runs at a 29–35 ms median, 63 ms worst, and 51 ms median on a 2-core quota. Ablation spreads it over several pieces, none dominant:
+- the throw control's opacity fade and the callout, each a new layer this WebKit composites in software;
+- the scoreboard's text;
+- the landed dart's settle and impact-ring animations.
+
+The contact frame itself and every flight frame are within or near budget. iOS composites opacity layers on the GPU, so this frame should be much cheaper there, but only a device can confirm it.
+
+### Tip alignment
+
+Re-measured by jumping each flight animation to its end and projecting the saved point through the board plane, nine varied throws per run:
+- **Flying dart's tip at the end of its path:** at most 0.000017 CSS px.
+- **Embedded dart:** at most 0.000005 px.
+
+This held in WebKit and Chromium at 390×844, 320×568 and 852×393. The even-width grip fix is unchanged.
+
+## Grab and flight verification · 20 November 2026
+
+- **Build.** All 18 Node tests pass, including four new ones for the touch target, a touch during a camera move, the 44 px floor and reach from the dart. The production build precaches 20 local assets with no new packages; `scripts/check/` is not shipped.
+- **Engines and how they were run.** Playwright 1.63 with the Chromium 157 headless shell and WebKit 26.6 (Playwright build `webkit-2359`) on Linux, an Intel Xeon at 2.1 GHz with 4 cores, at device scale 2. Chromium throttling used CDP `Emulation.setCPUThrottlingRate`. The WebKit "2-core quota" ran every WebKit process in a cgroup v1 CFS quota of 200% (10 ms periods). One core (100%) was unusable even before these changes (165 ms frames), so it isn't reported. The tools are `scripts/check/flight.cjs` and `scripts/check/match.cjs`.
+- **Matches.** 53 complete matches under `/Darts/` on the release candidate, then 7 of them again after the final fix (leaving mid-flight); all passed:
+  - **Coverage:** all nine viewports with their simulated insets; Chromium touch (CDP touch events), WebKit pointer and keyboard in both engines, with and without reduced motion; solo and duel.
+  - **Per-match checks:** every throw saves exactly one hit, an off-dart swipe costs nothing and shows the cue, and the first touch during each dolly-in picks the dart up. Results totals match the saved hits, keyboard focus reaches "Start round" and "Play again", and the console stays clean.
+  - **Under load:** run three at a time, WebKit pointer runs sometimes touched where the harness had read the dart mid-move after the camera had already arrived. That stale touch was confirmed by recording each touch; those runs pass when run one at a time.
+- **At rest.** No animation is running on the lobby, playfield, handoff or help screens in either engine. Under reduced motion `document.getAnimations()` is empty on all of them. With motion on, it still lists finished one-shot CSS animations held by `fill: both` (lamp, neon, card, callout), exactly as the previous build did. Reduced motion places the dart at once.
+- **Updates and offline, in both engines.**
+  - **Previous release to this build:** main at b0276a7 was installed with a working service worker, part-played with mute on, then the server switched to this build. "Update game" reloaded straight into the same visit, keeping darts, mute and acknowledged state.
+  - **Offline:** with the server stopped, a reload launched from cache, resumed, and took a dart by swipe.
+  - **Leaving mid-flight:** pressing back while a dart is in the air saved it, and Resume continued in both engines, with and without reduced motion.
+- **Not available here.** No macOS machine or iPhone was attached to this session, so neither the iOS simulator nor Safari Web Inspector timelines were used.
+
+**Still needs a hands-on check on a physical iPhone, ideally SE-class on iOS 16.4:**
+- **Safari Web Inspector timeline of a few throws.** Look for:
+  - frames from release to contact;
+  - whether the contact frame and the frame after it are inside 16.7 ms;
+  - that the board layer is never repainted during a flight (Layers tab).
+- **Grab feel.** Whether the target is forgiving enough at arm's length, whether the pulse and amber cue read as "touch here", and whether a touch on the dart during a dolly-in picks it up.
+- **The flight.** That the compositor-driven path and the main-thread fin roll stay in step, with no visible lag between dart and shadow.
+- **Board shadow and resting dart:** the board shadow looks the same as the old filtered one, and the resting dart is sharp. The board's `will-change` layer's memory on a 2× SE, roughly 1.3 MB.
