@@ -9,6 +9,7 @@ import {
   decodeMatch,
   swipeLanding,
 } from "../src/game.js";
+import { tune } from "../src/throw.js";
 
 const sectors = [
   20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5,
@@ -85,27 +86,33 @@ test("saved match rejects unknown modes, invalid coordinates and excess darts", 
   ])
     assert.equal(decodeMatch(x), null);
 });
-test("swipe direction and distance determine the impact in board coordinates", () => {
+test("swipe direction, length and release speed determine the impact in board coordinates", () => {
+  const g = tune.input,
+    k = g.sensitivity;
+  // The release speed that puts a straight 60% stroke at height y.
+  const speedFor = (y) => g.cruise * 2 ** (-y / (k * g.height));
   for (const width of [169, 227, 340, 400]) {
     assert.equal(swipeLanding(0, -(width / 3 - 1), width), null);
-    const minimum = swipeLanding(0, -width / 3, width);
-    assert.ok(minimum.y > radii.edge);
-    const formerBull = swipeLanding(0, -0.46 * width, width);
-    assert.ok(formerBull.y > radii.outerBull);
-    assert.ok(swipeLanding(0, -0.75 * width, width).y < -radii.outerBull);
     assert.deepEqual(swipeLanding(0, -0.6 * width, width), { x: 0, y: 0 });
-    for (const [fraction, label] of [
-      [0.363, "Double 3"],
-      [0.837, "Double 20"],
+    // At the neutral speed, length alone only nudges the dart off the bull...
+    const minimum = swipeLanding(0, -width / 3, width);
+    assert.ok(minimum.y > 0 && minimum.y < radii.trebleIn);
+    assert.ok(Math.abs(swipeLanding(0, -0.9 * width, width).y + 0.3 * k * g.reach) < 1e-9);
+    // ...release speed carries it: soft to the bottom of the board, hard to the top.
+    for (const [y, label] of [
+      [166, "Double 3"],
+      [103, "Treble 3"],
+      [-103, "Treble 20"],
+      [-166, "Double 20"],
     ]) {
-      const hit = swipeLanding(0, -fraction * width, width);
+      const hit = swipeLanding(0, -0.6 * width, width, speedFor(y));
       assert.equal(scoreAt(hit.x, hit.y).label, label);
     }
   }
   assert.deepEqual(swipeLanding(30, -240, 400), swipeLanding(15, -120, 200));
   assert.ok(swipeLanding(-40, -300, 400).x < 0);
   assert.ok(swipeLanding(40, -300, 400).x > 0);
-  const miss = swipeLanding(0, -550, 400);
+  const miss = swipeLanding(0, -240, 400, 4 * g.fast);
   assert.equal(scoreAt(miss.x, miss.y).points, 0);
   assert.ok(decodeMatch(advance(freshMatch("solo"), miss)));
 });

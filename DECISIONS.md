@@ -548,3 +548,233 @@ The room's existing pieces, used for the new moments:
 - **A 301 duel through at least one bust handoff,** in portrait and landscape.
 - **VoiceOver on one 301 visit.** It should read the remaining score and the checkout after each dart, "Bust, left on 1. Back to 121." on a bust, and the checkout route on the slots.
 - **Update game from the live release mid-match.** The existing Nine Dart Rush match and best should carry over.
+
+## The flick · 20 November 2026
+
+Players say the throw is too easy. This section supersedes "Identical releases should remain repeatable" and the gesture tuning in "Physical throw", and the stroke rules in "Grab and flight" where they say otherwise.
+
+### Measured first: the stroke model and the targets
+
+`scripts/model/difficulty.mjs` imitates a human flick and plays the throw with it. `scripts/model/legacy-throw.mjs` is the release model as shipped before this change (main at c83ebb6, copied verbatim and checked against git), so "before" can be re-measured at any time. Run `node scripts/model/difficulty.mjs` (about 7 minutes; 14 with `--robust --ablate`; `--quick` for a rougher pass in about a minute). Everything is seeded and prints the same numbers every run.
+
+**The model.**
+- **A stroke** is a minimum-jerk reach from rest, lifted part-way through. Lifting near peak speed is a decisive flick; lifting while slowing is hesitant. The path bows sideways, the finger trembles at 8–12 Hz, and sometimes it stops before lifting. The touch screen samples it at 60 or 120 Hz with random phase, adds 0.25 px of noise, reports thirds of a pixel, and reports the lift on the next sample at the last position.
+- **The player has learned the throw.** For each bed they aim at, they find the plan whose average landing on their own phone is the bed, by whichever of three ways hits it most often: keep a natural flick speed and vary the length; keep a length and vary the speed; or slide to a spot, stop and lift. Then they throw it with their own noise.
+- **Two profiles,** at a 340 px board (an iPhone 15 or 16 in portrait). Motor noise is physical, so it is in CSS px and seconds.
+
+| Per throw, 1σ | Casual | Skilled |
+|---|---|---|
+| Where the finger lifts, along the stroke | 9 px | 3.5 px |
+| Direction | 2.5° | 1.0° |
+| Peak flick speed | 15% (+0.1 widths/s) | 6% (+0.05 widths/s) |
+| Lift timing (0.5 = at peak speed, 1 = stopped) | 0.62 ± 0.08 | 0.52 ± 0.04 |
+| Bow of the path, per its length | 2% ± 2.5% | 0.5% ± 0.8% |
+| Stops before lifting | 8% of throws, 30–150 ms | 1%, 30–120 ms |
+| Tremor | 0.8 px | 0.4 px |
+
+  These are assumptions, not measurements. The ones I am least sure of are the speed spreads; `--robust` repeats everything with every noise ×⅔ and ×1.5.
+- **Measures.** Hit rates aiming at the bull (50 only), treble 20 and doubles 20 and 16; the expected Nine Dart Rush score with every dart aimed at whichever of T20, T19, bull or single 20 scores most; and darts to finish 301, double out, following the game's own checkout guide, played without the ten-round limit (the limit is shown as the share finished within 30 darts). Each figure is the mean of a 60 Hz and a 120 Hz phone. First-time players are modelled separately: casual noise, a natural speed and length drawn from wide spreads, aiming at the bull and correcting half of each miss.
+
+**Before** (main at c83ebb6):
+
+| Profile | Bull | T20 | D20 | D16 | Nine Dart Rush | 301 darts (mean / median) | 301 within 10 rounds | Aims T20 by |
+|---|---|---|---|---|---|---|---|---|
+| Casual | 6.7% | 10.0% | 14.0% | 18.5% | 199 | 20.8 / 19 | 90.8% | flick |
+| Skilled | 36.3% | 40.6% | 42.5% | 49.1% | 328 | 10.5 / 10 | 100% | slide and stop |
+
+- **The diagnosis holds.** A skilled player's best throw is not a throw: slide to a spot, stop, lift. The stop makes the release speed exactly zero every time, so the speed correction is a constant the player learns, and the lift point is read while the finger is still. The same plan with no motor noise spreads by only 0.6–0.8 mm.
+- **A fast flick was already noisy, for the wrong reason.** With the finger moving at lift, the last 60 Hz sample can fall up to 16.7 ms before it, and at 700 mm per board width that is up to 35 mm of height decided by when the screen happened to sample. Skilled flickers lost 10 points of T20 rate at 60 Hz against 120 Hz.
+- **Gap now:** skilled ÷ casual is 1.65 in Nine Dart Rush, 1.98 in 301 darts (casual ÷ skilled) and 4.1 in T20 rate.
+- First-time players: 97% of first darts land on the board and the median distance from the bull falls from 63 mm (dart 1) to 24 mm (dart 15).
+
+**Targets, set here before any tuning.** Each is checked with the full model run:
+
+| | Target | Before |
+|---|---|---|
+| Casual, clearly harder | T20 ≤ 6%, bull ≤ 4%, D20 ≤ 8% | 10.0%, 6.7%, 14.0% |
+| | Nine Dart Rush ≤ 160 | 199 |
+| | 301 ≥ 27 darts, but ≥ 60% still finish within 10 rounds | 20.8, 90.8% |
+| Skilled, still clearly rewarding | T20 ≥ 25%, bull ≥ 20%, D20 ≥ 25% | 40.6%, 36.3%, 42.5% |
+| | Nine Dart Rush ≥ 270 | 328 |
+| | 301 ≤ 14 darts, ≥ 98% within 10 rounds | 10.5, 100% |
+| Wider gap | Nine Dart Rush skilled ÷ casual ≥ 1.8 | 1.65 |
+| | 301 darts casual ÷ skilled ≥ 2.2 | 1.98 |
+| | T20 rate skilled ÷ casual ≥ 5 | 4.1 |
+| Learnable | ≥ 85% of first darts and ≥ 95% of third darts on the board; median miss at dart 15 ≤ half of dart 1 | 97%, 100%; 63 → 24 mm |
+| The player decides, not the screen | A clean skilled flick with no motor noise spreads ≤ 3 mm per axis at 60 Hz; 60 and 120 Hz agree within 2 mm on average and within 3 points of T20 rate | — |
+| Clean strokes stay clean | A clean stroke's miss is exactly 0; ≥ 85% of skilled strokes earn none | — |
+| No pointer aiming | Slide and stop is never a profile's best way to aim; it hits T20 ≤ 2% for the skilled profile | It is the skilled profile's best way |
+| Robust | Casual harder, skilled ≥ 270 and a wider gap still hold with every motor noise ×⅔ and ×1.5 | — |
+
+### The throw model
+
+Everything below is in `tune.input` in `src/throw.js`. Lengths are board widths and speeds are board widths per second, so the feel is the same on every iPhone and orientation.
+
+- **Release speed sets the height.** A clean release lands `height × sensitivity` (104.5 mm) higher for each doubling of its speed. The curve is logarithmic because a person's speed error grows with the speed (a fast flick is off by about as many percent as a slow one), so on a log curve the spread in millimetres is the same at every height. With a short stroke the bottom double needs a soft flick of about 1 board width per second; with a long one the top double needs about 7.7. The bull at the calibrated length needs `cruise` (2.8).
+- **Stroke length is a small nudge.** `reach × sensitivity` is 44 mm per board width: half as long again moves the dart 13 mm, against 104.5 mm for a doubling of speed. It stays small on purpose: a 60 Hz screen only knows where the finger was up to a frame before it lifted, so any position-based height inherits that frame as noise (below).
+- **Calibration.** A straight stroke of `bullRise` (60% of the board width) released at `cruise` still hits the bull exactly.
+- **The line.** The stroke's overall direction sets it at `aim × sensitivity` (7.59 mm per degree from straight up), so line and height are independent: a longer or faster stroke doesn't also move sideways. The direction of the release takes `flickSteer` (25%) of the line, so a late sideways flick still trims it. Once that flick bends the path past the free allowance, it is a fault.
+- **How the release is read.** Speed and direction are measured over the last `window` (0.15) board widths of travel, with the window's start interpolated between samples. A slow stroke is timed over longer and a fast one over less. The pointerup repeats the finger's last position, so the lift happened somewhere between the last move and the pointerup; the reading carries the stroke on to the middle of that gap (at most `liftMs`/2). A finger that rested within `stillPx` of where it lifted, for longer than a lift takes, had stopped there: the speed is the flick's, and the rest is a pause.
+- **Stroke quality.** Three measured faults, each free up to an allowance and then costing millimetres:
+  - **Bend:** the path's furthest point from a straight line, as a share of its length. 2.5% free, then 6 mm per percent.
+  - **Slowdown:** the largest fall in speed from its peak before the lift, a pause counting in full. 10% free, then 1.5 mm per percent. A pause of 40 ms costs about 50 mm.
+  - **Speed outside 0.75–10 widths/s:** 40 mm per doubling beyond. The board needs about 1–8, so this only catches extreme strokes.
+- **The miss.** A stroke misses its release point by exactly the sum of its faults, in a direction drawn from a seed. Within the allowances the miss is zero.
+- **The prompt coaches.** After a throw whose biggest fault cost 6 mm or more, the next dart's prompt says what to fix: "Keep the stroke straight", "Let go while still flicking", "Too hard · flick softer" or "Too soft · flick harder". After a clean throw that left the board, it says which way: "Too high · flick softer", "Too low · flick harder" or "Too wide · straighten your line". Screen readers hear it after the score. It is not shown after a visit's last dart, when the hand-off card is up.
+- **Unchanged.** Validity is the same: upward travel of at least a third of the board width and the same slope rule, so short, sideways and downward strokes still cost nothing. The flight takes `pace` (now log speed between `cruise` and `fast`) and `line` exactly as before, so a hard flick still flies flatter and quicker (202–270 ms). The tip still ends on the saved point, and `flyDart`, `entryPose`, `scoreAt`, the grab rule, the room, the layout, the rules of both games, `dartshift.save.v1`, `dartshift.301.v1` and `dartshift.resume` are untouched.
+
+### "Repeatable", redefined
+
+The same stroke always lands on the same point: the same path and timing relative to its own start, on the same board width. That holds wherever on the screen and whenever it is made. A **clean** stroke, with no fault past its allowance, has no randomness at all: it lands exactly where its line, length and speed say. A **sloppy** stroke misses that point by exactly its faults' total. Only the direction of the miss is random, from a seed that is a hash of the stroke itself (`strokeSeed`), or one passed to `releaseThrow` by the tests and the stroke model. A player can't game that, because a real thumb never repeats a stroke to a sixteenth of a pixel and millisecond, but a test can. Saved hits are points, never strokes, so nothing is re-thrown when a save loads.
+
+### Alternatives rejected
+
+- **Keep length-led height (700 mm per width) and add stroke quality only.** In the model it is nearly as hard on average (see the contributions below), because a fault for pausing also ends slide-and-stop aiming. But it is hard for the wrong reason: a flicking finger travels up to a frame further after the last 60 Hz sample, so with no motor noise at all, touch sampling alone spreads T20 by 7.9 mm and D20 by 11.7 mm (2.2 and 2.7 mm with speed-led height).
+- **A pause as a slower release.** My first version read the speed over the time up to the lift, so any pause of 60 ms or more dropped the dart off the board. Modelled first-time players took that as "flick harder", overshot, and got worse dart by dart. A pause now keeps the flick's speed and costs a miss that grows with the pause.
+- **A fixed time window.** The old 90 ms window centred the reading where a fast flick is still accelerating: about 6 mm of touch noise on the fastest strokes at 60 Hz. A 40 ms window halved that but put 6 mm on slow strokes, where the finger covers only 14 px in it. A distance window fixes both ends.
+- **Random scatter that is Gaussian in size.** It can hand a sloppy stroke a lucky zero. A miss of exactly the fault total, in a random direction, is proportional every time.
+- **Faults that push in fixed directions** (a hook pulls sideways, a slowdown drops). A player with a consistent flaw learns the offset and groups as tightly as a clean player, which is the opposite of the goal.
+- **Sideways from displacement** (the old 527.5 mm per width). Along a diagonal stroke, every length error would also move the dart sideways. Angle keeps the two apart.
+- **A bigger sensitivity increase** (×1.15 on a 6.9 mm/° line). It widened the T20 gap to 6×, but the skilled bull and Nine Dart Rush fell below target and fewer than half of casual 301 runs finished in ten rounds.
+- **A minimum flick speed.** Still rejected: a soft flick is how you reach the bottom of the board.
+
+### Before and after
+
+The same model and seeds for both. "Before" differs slightly from the baseline above (skilled Nine Dart Rush 319 here, 328 there) because the model's own aiming solver was fixed during tuning: it could not aim at some bottom doubles. The targets were set against the first baseline and are checked against both.
+
+| Profile | Bull | T20 | D20 | D16 | Nine Dart Rush | 301 darts (mean / median) | 301 within 10 rounds |
+|---|---|---|---|---|---|---|---|
+| Casual, before | 6.8% | 10.5% | 13.8% | 19.1% | 199 | 21.0 / 19 | 89.6% |
+| Casual, after | 2.5% | 6.2% | 9.2% | 8.5% | 139 | 31.1 / 28.5 | 57.9% |
+| Skilled, before | 36.2% | 40.5% | 41.3% | 50.0% | 319 | 10.4 / 10 | 100% |
+| Skilled, after | 21.4% | 29.8% | 31.4% | 32.1% | 276 | 12.8 / 12 | 99.9% |
+
+- **Gap,** skilled over casual: Nine Dart Rush 1.60 → 1.99; 301 darts (casual over skilled) 2.02 → 2.43; T20 rate 3.86 → 4.81.
+- **How each profile aims.** Before, the skilled profile's best way to hit T20 was slide and stop at both sample rates. After, both profiles flick: slide and stop can't reach T20 at all (the longest slide lands off the bottom of the board). For the skilled profile it hit T20 40.7% of the time before.
+- **Clean strokes.** 98.3% of the skilled profile's T20 strokes earn no miss, against 37.2% of the casual profile's (whose faulted strokes miss by a median 11.7 mm).
+- **60 and 120 Hz.** T20 rates were 6.7% and 5.7% (casual) and 28.8% and 30.8% (skilled). With no motor noise, touch sampling alone spreads a skilled plan by at most 1.4 mm sideways and 2.7 mm in height at 60 Hz; 60 and 120 Hz agree within 0.7 mm on average.
+- **First-time players.** 96%, 98% and 99% of darts 1–3 land on the board. The median distance from the bull falls from 62 mm at dart 1 to 46 at dart 2 and about 38–39 from dart 4 (before: 58 → 23).
+- **Robustness**, every motor noise ×⅔ and ×1.5:
+
+| | Casual NDR before → after | Skilled NDR before → after | Gap before → after | Casual 301 within 10 rounds, after |
+|---|---|---|---|---|
+| ×⅔ | 252 → 187 | 396 → 339 | 1.57 → 1.81 | 93.3% |
+| ×1.5 | 153 → 109 | 269 → 208 | 1.76 → 1.91 | 18.9% |
+
+  The direction holds at both: casual clearly harder, skilled still well ahead, gap wider. A much sloppier player (×1.5) will rarely finish 301 inside ten rounds.
+
+### What each change contributes
+
+Added one at a time in the brief's order, then each taken out of the finished throw (Nine Dart Rush expected score, T20 rate, 301 mean darts; casual / skilled):
+
+| | NDR | T20 | 301 darts | NDR gap |
+|---|---|---|---|---|
+| Before | 199 / 319 | 10.5% / 40.5% | 21.0 / 10.4 | 1.60 |
+| + Speed sets height | 153 / 297 | 7.8% / 33.1% | 27.0 / 12.0 | 1.94 |
+| + Stroke quality | 145 / 293 | 7.1% / 32.1% | 28.7 / 11.9 | 2.02 |
+| + Sensitivity ×1.1 (= after) | 139 / 276 | 6.2% / 29.8% | 31.1 / 12.8 | 1.99 |
+| After without speed (700 mm/width, 22 mm per doubling) | 144 / 270 | 6.7% / 26.1% | 30.4 / 13.3 | 1.88 |
+| After without stroke quality | 145 / 284 | 6.5% / 30.3% | 30.0 / 12.7 | 1.96 |
+| After without sensitivity | 145 / 293 | 7.1% / 32.1% | 28.7 / 11.9 | 2.02 |
+
+- **Speed does the work.** Added first, it takes 46 points off the casual profile and 22 off the skilled, and makes most of the gap. Taken out last, the averages barely move, because stroke quality alone also ends slide-and-stop. But then the 60 Hz screen decides much of each landing (7.9–11.7 mm of touch noise). Speed is the change that makes the throw hard for the player's reasons.
+- **Stroke quality adds little to the averages** (8 and 4 points), because a casual player's spread is dominated by speed error and a ~12 mm fault ring adds little on top. What it does: it is the rule that makes pausing, bending and steering cost something, keeps the skilled profile's strokes almost all clean (98%), and gives the prompt something specific to say.
+- **Sensitivity costs skilled players more points than casual ones** (17 against 6). It sharpens T20 (gap 4.5 → 4.8) and narrows Nine Dart Rush very slightly (2.02 → 1.99). It is the first knob to turn back if the game feels too hard.
+
+### Targets: hit and missed
+
+| Target | Result | |
+|---|---|---|
+| Casual T20 ≤ 6%, bull ≤ 4%, D20 ≤ 8% | 6.2%, 2.5%, 9.2% | **T20 and D20 missed** |
+| Casual Nine Dart Rush ≤ 160 | 139 | hit |
+| Casual 301 ≥ 27 darts, ≥ 60% within 10 rounds | 31.1; 57.9% | **finish rate missed** |
+| Skilled T20, bull, D20 ≥ 25%, 20%, 25% | 29.8%, 21.4%, 31.4% | hit |
+| Skilled Nine Dart Rush ≥ 270 | 276 | hit |
+| Skilled 301 ≤ 14 darts, ≥ 98% within 10 rounds | 12.8; 99.9% | hit |
+| Gap: Nine Dart Rush ≥ 1.8, 301 ≥ 2.2, T20 ≥ 5 | 1.99, 2.43, 4.81 | **T20 gap missed** |
+| First darts on the board ≥ 85%, third ≥ 95% | 96%, 99% | hit |
+| Median miss at dart 15 ≤ half of dart 1 | 62 → 39 mm (0.63) | **missed** |
+| Touch noise alone ≤ 3 mm at 60 Hz; 60/120 Hz within 2 mm and 3 points of T20 | 2.7 mm; 0.7 mm; 1.0 and 2.0 points | hit |
+| Clean stroke misses exactly 0; ≥ 85% of skilled strokes clean | tested; 98.3% | hit |
+| Slide and stop never best; ≤ 2% T20 for skilled | never chosen; 0% | hit |
+| Robust at ×⅔ and ×1.5 | casual harder and gap wider at both; skilled 339 and **208** | **skilled ≥ 270 missed at ×1.5** (before was 269 there) |
+
+The misses are one trade-off, not separate faults. Making the casual profile miss T20 and D20 more also stops it finishing 301 in time and slows how far a first-time player's grouping tightens, because all of them come from the same casual spread. Every tuning I tried moved them in opposite directions (casual D20 8.4–10.7% against ten-round finishes 51–59%). I kept the balance in the middle, where every goal stated in the brief holds: casual clearly harder on every measure, skilled clearly rewarded, every gap wider, and first-time darts on the board and improving. The ×1.5 target was badly set: the previous release only reached 269 there itself.
+
+### Records
+
+- **Personal bests start again.** Nine Dart Rush and 301 records set with the flick live in a new key, `dartshift.flick.v1`: `{ rush, 301, carried }`.
+- **The old records are kept as they were.** The `best` values in `dartshift.save.v1` and `dartshift.301.v1` are never written by this build, so both keys keep their exact shape and meaning, and an older cached copy (a rollback) still reads and writes them as before.
+- **Shown until replaced.** Until the flick sets a record, the lobby plate shows the old one, labelled "Best · old throw" (or "Fewest · old throw" for 301). The in-game "Best" and the results card show only flick records.
+- **A match begun before the update sets no record.** The first time the flick key is missing (typically after Update game, which reloads straight into the match), every match still in progress is marked carried. Finishing it shows "Begun with the old throw · no record". Starting a new match clears the mark.
+- `readSaves` and `writeSaves` in `src/game.js` handle the key, tested in `tests/x01.test.js`. `scripts/check/match.cjs` now reads the 301 record from it.
+
+### Keyboard
+
+The keyboard throw keeps its exact aim. It is the way to play for anyone who can't flick: screen reader, switch or keyboard users. It was exact before, and a deliberate route through it is how the match runner tests 301's busts and checkouts. Keyboard runs still set records. As before, a record belongs to one player on one device, and the person choosing the keyboard is competing with themselves.
+
+### Tuning on the phone
+
+All in `tune.input`. Change one value at a time and play a few visits.
+
+- **Too hard overall:** `sensitivity` 1.1 → 1.0 first. That undoes change 3: in the model the casual profile's ten-round 301 finishes go back up to 66% and the skilled profile scores 293. Then `height` down (95 → 85) if clean flicks still spread too much up and down. `npm test` fails if the top or bottom double drops out of comfortable reach.
+- **Too easy:** `sensitivity` up (1.2), or `height` up a little. To punish sloppy strokes more without touching clean ones, raise `bendCost` and `slowdownCost`.
+- **Too random:** watch the prompt.
+  - "Let go while still flicking" after flicks that felt clean: raise `slowdown` (10 → 15). If it follows quick flick-and-lifts, also raise `liftMs` (20 → 30): it would mean iOS reports the lift later than modelled.
+  - "Keep the stroke straight" on your natural thumb arc: raise `bend` (2.5 → 3.5).
+  - Sideways feels twitchy: lower `aim`.
+- **The bull flick lands consistently high or low:** change `cruise`, the speed of the neutral flick (higher if your medium flick lands high).
+- **A late sideways flick steers too much or too little:** `flickSteer`.
+
+### Code
+
+- `src/throw.js`: `readStroke` (line, length, speed, bend, slowdown, faults, miss), `strokeSeed`, the new `releaseThrow` and `swipeLanding(dx, dy, width, speed)`. `addSample` now keeps the whole stroke (up to 600 samples).
+- `src/input.js` passes the stroke reading to the landing, and the too-short prompt says "Flick further up to throw".
+- `src/app.js`: the How to play steps, the prompt's second line ("Faster flies higher · keep it straight"), the round and screen-reader text, coaching, and records.
+- `src/game.js`: the flick records.
+- Not shipped: `scripts/model/` (the stroke model, the vendored old model and the contribution runs) and `scripts/check/flick.cjs`. The build still precaches 22 assets.
+
+## The flick verification · 20 November 2026
+
+- **Automated.** All 40 Node tests pass. `tests/throw.test.js` covers:
+  - calibration at the neutral speed;
+  - speed to height, and length as a nudge;
+  - a pause as a fault that grows with the pause, including a finger trembling while it rests, and slide and stop landing off the board;
+  - stroke quality: zero for clean strokes at 60, 120 and 240 Hz with touch jitter, rising with bend, slowdown and speed outside the range, and a miss of exactly the fault total;
+  - the line, and a late flick's share of it;
+  - the same flick read at 60, 120 and 240 Hz and at three board widths;
+  - seeded determinism;
+  - rejection of invalid strokes;
+  - old-save replay, including strokes thrown through the vendored previous model and a 301 save with a bust.
+
+  `tests/grab.test.js` checks a comfortable clean flick to D20, D3, D11, D6, D12 and D18 from the lowest point of the touch target on all four smallest layouts. `tests/x01.test.js` covers the records.
+- **Changed existing tests,** where they fixed the old calibration rather than behaviour:
+  - "A quick finish lifts, a late pause drops" became the speed and pause tests: the same quick finish now lands far higher, and a pause scatters instead of dropping 32 mm.
+  - "Late sideways cuts" keeps its shape with a cut inside the bend allowance.
+  - The sample-interpolation test kept its paths and compares the reading, with a fixed seed for its bowed path.
+  - In `tests/game.test.js`, D3 and D20 at the neutral speed by length alone (0.363 and 0.837 widths) became D3, T3, T20 and D20 by speed.
+  - The reach test asks for a comfortable flick (speed between 1.2× `slow` and 0.8× `fast`, length up to 0.9 widths) instead of the old length-only release.
+- **The tests fail when the logic breaks.** Seven deliberate breaks of `src/throw.js` each failed at least one test: speed barely mattering, no lift estimate, unseeded scatter, faults ignored, a pause not detected, the late flick reversed, and no rejection.
+- **Build.** The production build precaches 22 local assets, as before.
+- **Complete matches** under `/Darts/` in Chromium (Playwright 1.63, the only engine installed), with clean consoles and results matching the saved hits:
+  - Nine Dart Rush solo at 390×844 by touch and by keyboard, each with and without reduced motion;
+  - 301 solo at 390×844 by keyboard (the bust-and-checkout route, record 17 written to the flick key) with and without reduced motion, and by touch;
+  - 301 solo by touch at 320×568 with reduced motion;
+  - a Nine Dart Rush touch duel at 852×393 with reduced motion;
+  - a 301 keyboard duel with reduced motion.
+- **`scripts/check/flick.cjs`** at 390×844, 320×568 and 852×393. Touch events carry steady 60 Hz timestamps, as a phone's digitiser stamps them.
+  - Every saved hit equals `releaseThrow` replayed on exactly the samples the page received.
+  - A neutral flick (60% of the width at 2.8 widths/s) scored the bullseye; twice as fast, T20; half as fast, treble 3.
+  - A 12% bow missed by 57 mm and prompted "Keep the stroke straight". A 150 ms pause missed by 93 mm and prompted "Let go while still flicking".
+  - The flying dart's tip ended within 0.00002 CSS px of the saved point on every throw.
+  - A save from the previous release showed "Best · old throw · 450" in the lobby, resumed its match with the old darts replayed, and finished with "Begun with the old throw · no record", leaving both records unchanged.
+  - Both "old throw" labels fit on one line at 320×568, 390×844, 667×375 and 852×393.
+- **Not run here.** WebKit isn't installed and no Mac, simulator or iPhone was attached. The service-worker update and offline paths were not re-run: no worker or cache code changed, and the new key is written by the same `save()`.
+
+**Real-phone feel is for you to check.** Everything above is measured, but only against a model of a thumb. On the phone, after Update game:
+- **The neutral flick.** Does a medium, natural flick hit near the bull? If it lands consistently high or low, adjust `cruise`.
+- **Both ends of the board.** Can you reach the top doubles with a hard flick and the bottom ones with a soft one, in both orientations, without straining?
+- **The prompts.** How often do they appear when you feel you threw cleanly? "Let go while still flicking" after a quick flick-and-lift would mean iOS reports the lift later than modelled: raise `liftMs`. "Keep the stroke straight" on a natural thumb arc means `bend` is too tight.
+- **Learning.** Do your darts group noticeably better after a few visits? Ideally, also ask someone who has never played.
+- **Records.** Does the lobby show your old best as "Best · old throw"? Does a match you were in the middle of when you pressed Update game finish without setting a record?
+- **VoiceOver.** The coaching follows the score in the announcement.

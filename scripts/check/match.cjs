@@ -109,7 +109,7 @@ const fail = (m) => { throw new Error(m); };
     const shown = [...document.querySelectorAll(".result-score span")].map((s) => +s.textContent);
     // A solo 301 checkout shows the dart count.
     const want = m.game && m.mode === "solo" && s.out ? [m.hits.length] : s.totals;
-    return { totals: want, shown, hits: m.hits.length, complete: s.complete, out: s.out, winner: s.winner, best: saved.best, title: document.querySelector("#result-title").textContent, rush: JSON.parse(localStorage.getItem("dartshift.save.v1")) };
+    return { totals: want, shown, hits: m.hits.length, complete: s.complete, out: s.out, winner: s.winner, best: JSON.parse(localStorage.getItem("dartshift.flick.v1"))?.[m.game === "301" ? "301" : "rush"], oldBest: saved.best, title: document.querySelector("#result-title").textContent, rush: JSON.parse(localStorage.getItem("dartshift.save.v1")) };
   }, saveKey);
   if (JSON.stringify(check.totals) !== JSON.stringify(check.shown) || !check.complete) fail("results mismatch " + JSON.stringify(check));
   if (x01 && input === "keyboard" && (!check.out || check.winner !== 0 || busts !== 3 || (mode === "solo" && check.best !== 17))) fail("301 route " + JSON.stringify({ ...check, busts }));

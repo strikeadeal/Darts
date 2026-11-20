@@ -240,3 +240,27 @@ test("301 data stays out of save.v1 and survives an older copy rewriting it", ()
   assert.equal(readSaves({ match: state[301].match }, { match: v1.match })[301].match, null);
   for (const best of [5, 31, -1, "12"]) assert.equal(readSaves(null, { best })[301].best, null);
 });
+
+test("flick records start fresh beside the old throw's, and a match begun before the flick sets none", () => {
+  // First load after the update: no flick key yet, a Nine Dart Rush duel in progress.
+  const first = readSaves(JSON.parse(JSON.stringify(v1)), null, null);
+  assert.deepEqual(first.flick, { rush: null, 301: null, carried: ["rush"] });
+  assert.equal(first.rush.best, 450); // the old throw's record, untouched
+  const out = JSON.parse(JSON.stringify(writeSaves(first)));
+  assert.deepEqual(out[saveKeys.rush], { ...v1, acknowledged: -1 });
+  assert.deepEqual(out[saveKeys.flick], { rush: null, 301: null, carried: ["rush"] });
+  // Later loads keep the mark while that match is open, and drop it once it is done.
+  assert.deepEqual(readSaves(v1, null, out[saveKeys.flick]).flick.carried, ["rush"]);
+  const done = { ...v1, match: { mode: "solo", hits: Array(9).fill(bed("T20")) } };
+  assert.deepEqual(readSaves(done, null, out[saveKeys.flick]).flick.carried, []);
+  // A match started after the update was never carried; an empty first load carries nothing.
+  assert.deepEqual(readSaves(v1, null, { rush: 300, 301: 9, carried: [] }).flick, { rush: 300, 301: 9, carried: [] });
+  assert.deepEqual(readSaves(null, null, null).flick, { rush: null, 301: null, carried: [] });
+  // Bad values are dropped, and an older copy rewriting save.v1 leaves the flick records alone.
+  for (const bad of [{ rush: 541 }, { rush: "300" }, { 301: 5 }, { 301: 31 }, "x"])
+    assert.deepEqual([readSaves(null, null, bad).flick.rush, readSaves(null, null, bad).flick[301]], [null, null]);
+  assert.deepEqual(readSaves(v1, null, { carried: "rush" }).flick.carried, []);
+  const old = { match: null, best: 455, muted: false, acknowledged: -1 };
+  assert.deepEqual(readSaves(old, null, { rush: 300, 301: 9, carried: [] }).flick, { rush: 300, 301: 9, carried: [] });
+  assert.equal(readSaves(old, null, { rush: 300 }).rush.best, 455);
+});

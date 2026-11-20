@@ -6,14 +6,16 @@ Dartshift is a darts game for iPhone with two games: **Nine Dart Rush**, three r
 
 1. Pick **Nine Dart Rush** or **301**, then **Solo run** or **Local duel**. The lobby remembers the last game.
 2. Put your finger on the dart beneath the board. A touch anywhere else never throws: the dart pulses and the prompt says where to start.
-3. Swipe upward at least a third of the board’s width, then lift. Angle the swipe to send the dart left or right. Start with a straight stroke just over half a board wide. A longer stroke or quicker finish carries higher. Ease off for a lower hit, or flick sideways to trim your line. Short or downward strokes cost no dart.
+3. Flick it up the screen and let go while your finger is still moving. The faster the flick, the higher the dart lands; lean the stroke left or right to aim. Start with a medium flick at the bull. A curved, slowing or paused stroke scatters the dart, and the prompt says what to fix. Short, sideways or downward strokes cost no dart.
 
 The thin inner ring scores treble and the outer ring double. The outer bull scores 25, the centre scores 50, and a miss uses one dart for zero points.
 
 - **Nine Dart Rush.** Each player throws three darts per visit and gets three visits. The maximum is 540. Duels alternate visits and equal totals draw.
 - **301.** Count down from 301 to exactly zero, finishing on a double or the bull. Going below zero, leaving 1, or reaching zero any other way is a bust: the visit ends and the score goes back to where it started. The empty dart slots on the scoreboard suggest a checkout. Each player gets ten rounds; if nobody checks out, the lowest score wins. A solo run's record is the fewest darts to finish.
 
-On a keyboard, focus the dart, aim with the arrow keys, then press and release Space or Enter to throw. Shift and arrows make finer adjustments. Escape cancels. The back arrow saves your place. Select the **Resume** mode button to continue after closing the game.
+On a keyboard, focus the dart, aim with the arrow keys, then press and release Space or Enter to throw. Shift and arrows make finer adjustments. Escape cancels. The keyboard places the dart exactly where the sight is, as before.
+
+Personal bests start again with the flick (released after 20 November 2026). Until you set one, the lobby shows your old record as "Best · old throw"; it is kept on the device and never overwritten. The back arrow saves your place. Select the **Resume** mode button to continue after closing the game.
 
 ## Install on iPhone
 
@@ -43,7 +45,8 @@ Push to `main`. The Pages workflow runs the scoring tests, builds `dist/`, uploa
 ## Code and verification
 
 - `src/game.js` contains board scoring, match progression for both games, checkout routes, saved-match validation and the save format. `tests/game.test.js` and `tests/x01.test.js` exercise those rules with Node's built-in test runner.
-- `src/throw.js` holds the release model and the tuning values for gesture sensitivity, camera, flight, grip and impact. `tune.grab` sets the touch target around the dart.
+- `src/throw.js` holds the release model and the tuning values for gesture sensitivity, camera, flight, grip and impact. `tune.input` sets how a flick lands; [The flick](DECISIONS.md) says which values to try first on a phone. `tune.grab` sets the touch target around the dart.
+- `scripts/model/difficulty.mjs` is a model of human thumb flicks (casual and skilled) that plays the throw and reports hit rates, Nine Dart Rush and 301 against the previous release (`scripts/model/legacy-throw.mjs`). `node scripts/model/difficulty.mjs --quick` takes about a minute. `tests/throw.test.js` uses its stroke generator.
 - `src/input.js` owns pointer capture, keyboard input, frame-timed presentation and cancellation. `src/art.js` draws the playable board from the scoring constants.
 - `style.css` opens with **Scene tuning**: the room's camera shots, depth, lamp and transition timings, with the landscape and short-portrait overrides beneath. `src/app.js` moves one persistent room between those shots. The play shot is untransformed, so the throw's own `tune` is unaffected.
 - `scripts/build.mjs` hashes the shipped files and worker template, then emits the scoped precache worker. Every font and image is local. The OFL font licenses are in `assets/fonts/`.
@@ -55,6 +58,6 @@ Next up would be personal-best round splits. This release leaves out 501, legs a
 
 ### Verification limits
 
-The dart-only grab and the compositor-driven flight were profiled and played under `/Darts/` in Chromium and WebKit (`scripts/check/` holds the profiler and match runner; they need Playwright and are not part of the build). The match runner plays 301 too: `node scripts/check/match.cjs chromium dist 390x844 solo keyboard 0 301`. Earlier, the throw and the 3D room were checked in Chromium, WebKit and the iPhone 17 simulator, in Safari and as the installed app. Checks covered full solo and duel matches, touch, keyboard and reduced motion, saved-point alignment, offline reload, service-worker updates and a safe-area layout audit at nine viewport sizes. Physical iPhone touch feel, the room's compositing cost and sustained frame rate on an SE-class phone, and sound with the silent switch need hardware testing. [Design decisions](DECISIONS.md) records the simulator strokes, frame timings and viewport results.
+The flick was measured with the stroke model and checked in Chromium under `/Darts/` (`scripts/check/flick.cjs`): saved hits equal the model replayed on the page's own touch samples, and the flying tip ends on the scored point. How it feels under a real thumb on a real iPhone has not been checked. The dart-only grab and the compositor-driven flight were profiled and played under `/Darts/` in Chromium and WebKit (`scripts/check/` holds the profiler and match runner; they need Playwright and are not part of the build). The match runner plays 301 too: `node scripts/check/match.cjs chromium dist 390x844 solo keyboard 0 301`. Earlier, the throw and the 3D room were checked in Chromium, WebKit and the iPhone 17 simulator, in Safari and as the installed app. Checks covered full solo and duel matches, touch, keyboard and reduced motion, saved-point alignment, offline reload, service-worker updates and a safe-area layout audit at nine viewport sizes. Physical iPhone touch feel, the room's compositing cost and sustained frame rate on an SE-class phone, and sound with the silent switch need hardware testing. [Design decisions](DECISIONS.md) records the simulator strokes, frame timings and viewport results.
 
 The installed app's full-screen layout (`src/viewport.js`) was checked in Chromium with a model of the iOS 26+ short viewport. On an iPhone 14 Pro with iOS 27, the shipped approach was measured filling the screen and taking touches to the bottom edge in portrait and landscape. That approach is a visible root with a body as tall as the screen, applied only in the installed app. To read what an installed copy reports, open **How to play** and tap its title five times. A viewport readout appears and stays on across launches until the same five taps turn it off. Players never see it otherwise. `?viewport` does the same in a Safari tab.
