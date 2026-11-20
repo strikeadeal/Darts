@@ -27,7 +27,7 @@ export const profiles = {
     angle: 2.5, // degrees, 1σ: direction of the stroke
     speed: 0.15, // 1σ relative error in peak flick speed (log-normal)
     floor: 0.1, // board widths/s, 1σ absolute speed error (dominates very slow strokes)
-    flick: 3.2, // natural peak speed, board widths/s
+    flick: 4.5, // natural peak speed, board widths/s (~250 mm/s: Bevan & Fraser 2016, secondhand)
     tau: [0.62, 0.08], // when the finger lifts: 0.5 = at peak speed, 1 = stopped (mean, 1σ)
     bend: [0.02, 0.025], // bow of the path / its length: habitual, 1σ
     stall: [0.08, 30, 150], // chance of stopping before lifting, and the pause in ms
@@ -39,7 +39,7 @@ export const profiles = {
     angle: 1.0,
     speed: 0.06,
     floor: 0.05,
-    flick: 3.0,
+    flick: 4.3,
     tau: [0.52, 0.04],
     bend: [0.005, 0.008],
     stall: [0.01, 30, 120],
@@ -428,7 +428,7 @@ export function novices(model, p, control, { count = quick ? 300 : 1000, darts =
   for (let k = 0; k < count; k++) {
     const plan = {
       L: clamp(0.58 + 0.1 * r.normal(), 0.36, 1),
-      peak: 3.2 * Math.exp(0.45 * r.normal()),
+      peak: 4.5 * Math.exp(0.45 * r.normal()),
       theta: (3 * Math.PI / 180) * r.normal(),
     };
     for (let d = 0; d < darts; d++) {

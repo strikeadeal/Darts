@@ -18,7 +18,7 @@ export const tune = {
     stillPx: 2,
     // Where a clean flick lands. A straight stroke of `bullRise` released at
     // `cruise` hits the bull. Release speed is the main height control.
-    cruise: 2.8,
+    cruise: 4, // board widths/s: an ordinary, unforced flick (about 250 mm/s on a phone)
     bullRise: 0.6,
     height: 95, // mm higher for each doubling of release speed
     reach: 40, // mm higher per board width of extra stroke length
@@ -28,7 +28,7 @@ export const tune = {
     // Stroke quality. Each fault past its free allowance adds a miss of this
     // many mm, in a direction seeded by the stroke itself.
     slow: 0.6,
-    fast: 13, // the comfortable release speeds: the board spans about 0.8 to 10
+    fast: 19, // the comfortable release speeds: the board spans about 1.1 to 14.5
     outside: 40, // mm per doubling of speed outside them
     bend: 2.5, // % of its length the path may bow from straight
     bendCost: 6, // mm per % beyond
