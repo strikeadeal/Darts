@@ -82,14 +82,15 @@ test("release speed sets the height; stroke length only nudges it", () => {
   assert.ok(Math.abs(y(0.6, g.cruise) - y(0.9, g.cruise) - 0.3 * k * g.reach) < 1e-6);
   assert.ok(0.3 * g.reach < g.height / 3);
   // The same stroke length: a quick finish lands far higher than a steady one.
-  const start = [0, 0, 0],
-    end = [300, 0, -0.6];
-  const quick = throwPath([start, [210, 0, -0.06], end]);
-  const even = throwPath([start, [210, 0, -0.348], end]);
+  const T = 2.8 / g.cruise, // the same paths sped up to the current neutral speed
+    start = [0, 0, 0],
+    end = [300 * T, 0, -0.6];
+  const quick = throwPath([start, [210 * T, 0, -0.06], end]);
+  const even = throwPath([start, [210 * T, 0, -0.348], end]);
   assert.equal(scoreAt(even.x, even.y).points, 50);
   assert.ok(quick.y < even.y - k * g.height && quick.x === 0); // more than a doubling higher
   assert.ok(quick.pace > 0.3 && Math.abs(even.pace) < 1e-9);
-  assert.deepEqual(throwPath([start, [210, 0, -0.06], end]), quick);
+  assert.deepEqual(throwPath([start, [210 * T, 0, -0.06], end]), quick);
 });
 
 test("a pause before letting go is a fault that grows with the pause, not a softer flick", () => {
@@ -167,7 +168,7 @@ test("the line: the stroke's direction sets it, a late flick takes a share, a ho
   const g = tune.input,
     k = g.sensitivity;
   for (const angle of [-25, -10, 10, 25]) {
-    const hit = throwPath(steady(0.6, 2.8, { angle }));
+    const hit = throwPath(steady(0.6, g.cruise, { angle }));
     assert.ok(Math.abs(hit.x - k * g.aim * angle) < 1e-6);
     assert.ok(Math.abs(hit.y) < 1e-6);
     assert.ok(Math.abs(hit.line) < 1e-12); // a straight diagonal keeps its line

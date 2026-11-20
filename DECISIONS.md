@@ -610,7 +610,7 @@ Players say the throw is too easy. This section supersedes "Identical releases s
 
 Everything below is in `tune.input` in `src/throw.js`. Lengths are board widths and speeds are board widths per second, so the feel is the same on every iPhone and orientation.
 
-- **Release speed sets the height.** A clean release lands `height × sensitivity` (83.6 mm) higher for each doubling of its speed. The curve is logarithmic because a person's speed error grows with the speed (a fast flick is off by about as many percent as a slow one), so on a log curve the spread in millimetres is the same at every height. With a short stroke the bottom double needs a soft flick of about 0.8 board widths per second; with a long one the top double needs about 10. The bull at the calibrated length needs `cruise` (2.8).
+- **Release speed sets the height.** A clean release lands `height × sensitivity` (83.6 mm) higher for each doubling of its speed. The curve is logarithmic because a person's speed error grows with the speed (a fast flick is off by about as many percent as a slow one), so on a log curve the spread in millimetres is the same at every height. With a short stroke the bottom double needs a soft flick of about 1.1 board widths per second; with a long one the top double needs about 14.5. The bull at the calibrated length needs `cruise` (4, an ordinary flick).
 - **Stroke length is a small nudge.** `reach × sensitivity` is 35 mm per board width: half as long again moves the dart 11 mm, against 84 mm for a doubling of speed. It stays small on purpose: a 60 Hz screen only knows where the finger was up to a frame before it lifted, so any position-based height inherits that frame as noise (below).
 - **Calibration.** A straight stroke of `bullRise` (60% of the board width) released at `cruise` still hits the bull exactly.
 - **The line.** The stroke's overall direction sets it at `aim × sensitivity` (6.07 mm per degree from straight up), so line and height are independent: a longer or faster stroke doesn't also move sideways. The direction of the release takes `flickSteer` (25%) of the line, so a late sideways flick still trims it. Once that flick bends the path past the free allowance, it is a fault.
@@ -618,7 +618,7 @@ Everything below is in `tune.input` in `src/throw.js`. Lengths are board widths 
 - **Stroke quality.** Three measured faults, each free up to an allowance and then costing millimetres:
   - **Bend:** the path's furthest point from a straight line, as a share of its length. 2.5% free, then 6 mm per percent.
   - **Slowdown:** the largest fall in speed from its peak before the lift, a pause counting in full. 10% free, then 1.5 mm per percent. A pause of 40 ms costs about 50 mm.
-  - **Speed outside 0.6–13 widths/s:** 40 mm per doubling beyond. The board needs about 0.8–10, so this only catches extreme strokes.
+  - **Speed outside 0.6–19 widths/s:** 40 mm per doubling beyond. The board needs about 1.1–14.5, so this only catches extreme strokes.
 - **The miss.** A stroke misses its release point by exactly the sum of its faults, in a direction drawn from a seed. Within the allowances the miss is zero.
 - **The prompt coaches.** After a throw whose biggest fault cost 6 mm or more, the next dart's prompt says what to fix: "Keep the stroke straight", "Let go while still flicking", "Too hard · flick softer" or "Too soft · flick harder". After a clean throw that left the board, it says which way: "Too high · flick softer", "Too low · flick harder" or "Too wide · straighten your line". Screen readers hear it after the score. It is not shown after a visit's last dart, when the hand-off card is up.
 - **Unchanged.** Validity is the same: upward travel of at least a third of the board width and the same slope rule, so short, sideways and downward strokes still cost nothing. The flight takes `pace` (now log speed between `cruise` and `fast`) and `line` exactly as before, so a hard flick still flies flatter and quicker (202–270 ms). The tip still ends on the saved point, and `flyDart`, `entryPose`, `scoreAt`, the grab rule, the room, the layout, the rules of both games, `dartshift.save.v1`, `dartshift.301.v1` and `dartshift.resume` are untouched.
@@ -756,6 +756,17 @@ All in `tune.input`. Change one value at a time and play a few visits.
 - **Touch noise alone** at 60 Hz is now up to 3.1 mm in height at D20 (×1.1: 2.7): the top double needs a faster, shorter flick, and the screen sees fewer frames of it. 60 and 120 Hz agree within 1.2 mm on average.
 - **Targets now** (set for ×1.1): casual Nine Dart Rush ≤ 160, ten-round 301 ≥ 60%, every skilled target and the Nine Dart Rush and 301 gaps hold. Casual bull, T20, D20 and 301 darts, the T20 gap (4.47 against 5), the first-time learning ratio (0.57 against 0.5) and the 3 mm touch-noise limit (3.1) are missed. That is the expected price of a cut this size: the casual game is easier than at ×1.1 but still harder than before the flick on every measure, and the skilled player is back near where they were.
 
+## Neutral speed · 20 November 2026
+
+Players reported the swipe as too sensitive and said they couldn't hit the lower half of the board. `cruise` 2.8 → 4 widths/s and `fast` 13 → 19.
+
+- **Cause: the neutral flick was set too slow.** The bull needed a release of 2.8 widths/s, so anything below the bull needed a softer flick than that and the bottom double a 0.76 widths/s crawl (about 47 mm/s on an iPhone 15). 2.8 came from the model player's natural speed (3.2 widths/s peak), which I assumed and never measured; the model then agreed with itself. Players' ordinary flicks are evidently faster, so they land high, and the 20% sensitivity cut made it worse by stretching the speed range the board needs. It was also not "too sensitive" in the sense of mm per change in speed: that slope is unchanged here.
+- **The fix centres the board on an ordinary flick.** At 4 widths/s (about 250 mm/s on an iPhone 15's 62 mm board) a relaxed flick hits the bull. The lower half is now any flick softer than that, down to about 1.1 for the bottom double. The top double needs a hard flick of about 14.5, so `fast` rose to keep it inside the comfortable range the reach test asks for.
+- **Evidence for 4 is thin.** One secondhand figure puts typical maximum swipe speed on phones at 250–280 mm/s (Bevan & Fraser 2016, cited by a 2024 paper; not read in the original). That is about 4–6 board widths/s depending on the phone. The complaint itself is the strongest evidence: ordinary flicks are faster than 2.8. Whether 4 is right needs the phone.
+- **Model players re-centred to match:** natural peak 3.2 → 4.5 (casual), 3.0 → 4.3 (skilled), and first-time players drawn around 4.5. Difficulty is about unchanged, as it should be: casual 9.2% T20, 157 Nine Dart Rush, 25.2 darts for 301 (77.2% within ten rounds); skilled 38.4%, 315, 11.2. First darts on the board 98–99%; median miss 50 mm at dart 1, about 31 by dart 6.
+- **Cost: more touch noise at the top on 60 Hz.** A faster flick at the top spans fewer frames, so touch sampling alone now spreads a skilled D20 by 5.6 mm (1σ, height) at 60 Hz and 2.1 mm at 120 Hz, against 3.1 and 1.5 before; T20 3.9 and 1.7. The bull and the lower half are unaffected. A longer reading window (0.2 or 0.25 widths) didn't help, because the spread comes from not knowing exactly when the finger lifted. This misses the 3 mm touch-noise target at the top on 60 Hz screens.
+- **Tests and checks.** Two tests used fixed speeds of 2.8 for the neutral; they now use `cruise`, or scale their paths to it. The browser check throws its neutral at 4, its fast at 8 and its slow at 2.
+
 ## The flick verification · 20 November 2026
 
 - **Automated.** All 40 Node tests pass. `tests/throw.test.js` covers:
@@ -786,7 +797,7 @@ All in `tune.input`. Change one value at a time and play a few visits.
   - a 301 keyboard duel with reduced motion.
 - **`scripts/check/flick.cjs`** at 390×844, 320×568 and 852×393. Touch events carry steady 60 Hz timestamps, as a phone's digitiser stamps them.
   - Every saved hit equals `releaseThrow` replayed on exactly the samples the page received.
-  - A neutral flick (60% of the width at 2.8 widths/s) scored the bullseye; twice as fast, T20; half as fast, treble 3.
+  - A neutral flick (60% of the width at the neutral speed, then 2.8 widths/s) scored the bullseye; twice as fast, T20; half as fast, treble 3.
   - A 12% bow missed by 57 mm and prompted "Keep the stroke straight". A 150 ms pause missed by 93 mm and prompted "Let go while still flicking".
   - The flying dart's tip ended within 0.00002 CSS px of the saved point on every throw.
   - A save from the previous release showed "Best · old throw · 450" in the lobby, resumed its match with the old darts replayed, and finished with "Begun with the old throw · no record", leaving both records unchanged.
