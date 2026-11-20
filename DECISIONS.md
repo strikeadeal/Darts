@@ -548,3 +548,60 @@ The room's existing pieces, used for the new moments:
 - **A 301 duel through at least one bust handoff,** in portrait and landscape.
 - **VoiceOver on one 301 visit.** It should read the remaining score and the checkout after each dart, "Bust, left on 1. Back to 121." on a bust, and the checkout route on the slots.
 - **Update game from the live release mid-match.** The existing Nine Dart Rush match and best should carry over.
+
+## The flick · 20 November 2026
+
+Players say the throw is too easy. This section supersedes "Identical releases should remain repeatable" and the gesture tuning in "Physical throw", and the stroke rules in "Grab and flight" where they say otherwise.
+
+### Measured first: the stroke model and the targets
+
+`scripts/model/difficulty.mjs` imitates a human flick and plays the throw with it. `scripts/model/legacy-throw.mjs` is the release model as shipped before this change (main at c83ebb6, copied verbatim and checked against git), so "before" can be re-measured at any time. Run `node scripts/model/difficulty.mjs` (about 7 minutes; `--quick` for a rougher pass). Everything is seeded and prints the same numbers every run.
+
+**The model.**
+- **A stroke** is a minimum-jerk reach from rest, lifted part-way through. Lifting near peak speed is a decisive flick; lifting while slowing is hesitant. The path bows sideways, the finger trembles at 8–12 Hz, and sometimes it stops before lifting. The touch screen samples it at 60 or 120 Hz with random phase, adds 0.25 px of noise, reports thirds of a pixel, and reports the lift on the next sample at the last position.
+- **The player has learned the throw.** For each bed they aim at, they find the plan whose average landing on their own phone is the bed, by whichever of three ways hits it most often: keep a natural flick speed and vary the length; keep a length and vary the speed; or slide to a spot, stop and lift. Then they throw it with their own noise.
+- **Two profiles,** at a 340 px board (an iPhone 15 or 16 in portrait). Motor noise is physical, so it is in CSS px and seconds.
+
+| Per throw, 1σ | Casual | Skilled |
+|---|---|---|
+| Where the finger lifts, along the stroke | 9 px | 3.5 px |
+| Direction | 2.5° | 1.0° |
+| Peak flick speed | 15% (+0.1 widths/s) | 6% (+0.05 widths/s) |
+| Lift timing (0.5 = at peak speed, 1 = stopped) | 0.62 ± 0.08 | 0.52 ± 0.04 |
+| Bow of the path, per its length | 2% ± 2.5% | 0.5% ± 0.8% |
+| Stops before lifting | 8% of throws, 30–150 ms | 1%, 30–120 ms |
+| Tremor | 0.8 px | 0.4 px |
+
+  These are assumptions, not measurements. The ones I am least sure of are the speed spreads; `--robust` repeats everything with every noise ×⅔ and ×1.5.
+- **Measures.** Hit rates aiming at the bull (50 only), treble 20 and doubles 20 and 16; the expected Nine Dart Rush score with every dart aimed at whichever of T20, T19, bull or single 20 scores most; and darts to finish 301, double out, following the game's own checkout guide, played without the ten-round limit (the limit is shown as the share finished within 30 darts). Each figure is the mean of a 60 Hz and a 120 Hz phone. First-time players are modelled separately: casual noise, a natural speed and length drawn from wide spreads, aiming at the bull and correcting half of each miss.
+
+**Before** (main at c83ebb6):
+
+| Profile | Bull | T20 | D20 | D16 | Nine Dart Rush | 301 darts (mean / median) | 301 within 10 rounds | Aims T20 by |
+|---|---|---|---|---|---|---|---|---|
+| Casual | 6.7% | 10.0% | 14.0% | 18.5% | 199 | 20.8 / 19 | 90.8% | flick |
+| Skilled | 36.3% | 40.6% | 42.5% | 49.1% | 328 | 10.5 / 10 | 100% | slide and stop |
+
+- **The diagnosis holds.** A skilled player's best throw is not a throw: slide to a spot, stop, lift. The stop makes the release speed exactly zero every time, so the speed correction is a constant the player learns, and the lift point is read while the finger is still. The same plan with no motor noise spreads by only 0.6–0.8 mm.
+- **A fast flick was already noisy, for the wrong reason.** With the finger moving at lift, the last 60 Hz sample can fall up to 16.7 ms before it, and at 700 mm per board width that is up to 35 mm of height decided by when the screen happened to sample. Skilled flickers lost 10 points of T20 rate at 60 Hz against 120 Hz.
+- **Gap now:** skilled ÷ casual is 1.65 in Nine Dart Rush, 1.98 in 301 darts (casual ÷ skilled) and 4.1 in T20 rate.
+- First-time players: 97% of first darts land on the board and the median distance from the bull falls from 63 mm (dart 1) to 24 mm (dart 15).
+
+**Targets, set here before any tuning.** Each is checked with the full model run:
+
+| | Target | Before |
+|---|---|---|
+| Casual, clearly harder | T20 ≤ 6%, bull ≤ 4%, D20 ≤ 8% | 10.0%, 6.7%, 14.0% |
+| | Nine Dart Rush ≤ 160 | 199 |
+| | 301 ≥ 27 darts, but ≥ 60% still finish within 10 rounds | 20.8, 90.8% |
+| Skilled, still clearly rewarding | T20 ≥ 25%, bull ≥ 20%, D20 ≥ 25% | 40.6%, 36.3%, 42.5% |
+| | Nine Dart Rush ≥ 270 | 328 |
+| | 301 ≤ 14 darts, ≥ 98% within 10 rounds | 10.5, 100% |
+| Wider gap | Nine Dart Rush skilled ÷ casual ≥ 1.8 | 1.65 |
+| | 301 darts casual ÷ skilled ≥ 2.2 | 1.98 |
+| | T20 rate skilled ÷ casual ≥ 5 | 4.1 |
+| Learnable | ≥ 85% of first darts and ≥ 95% of third darts on the board; median miss at dart 15 ≤ half of dart 1 | 97%, 100%; 63 → 24 mm |
+| The player decides, not the screen | A clean skilled flick with no motor noise spreads ≤ 3 mm per axis at 60 Hz; 60 and 120 Hz agree within 2 mm on average and within 3 points of T20 rate | — |
+| Clean strokes stay clean | A clean stroke's miss is exactly 0; ≥ 85% of skilled strokes earn none | — |
+| No pointer aiming | Slide and stop is never a profile's best way to aim; it hits T20 ≤ 2% for the skilled profile | It is the skilled profile's best way |
+| Robust | Casual harder, skilled ≥ 270 and a wider gap still hold with every motor noise ×⅔ and ×1.5 | — |
