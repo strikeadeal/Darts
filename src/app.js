@@ -3,6 +3,7 @@ import { icon, board, landed, readyDart } from "./art.js";
 import { bindThrows, bindTurnButton, flyDart } from "./input.js";
 import { boardPosition } from "./throw.js";
 import { unlock, impact, whoosh, fanfare } from "./sound.js";
+import { fitScreen } from "./viewport.js";
 
 const $ = (s) => document.querySelector(s);
 const scene = $("#scene"),
@@ -279,8 +280,38 @@ function help() {
   sheet(
     "How to play",
     '<ol class="steps"><li><strong>Pick up the dart.</strong><small>Put your finger on the dart beneath the board. Swipe up at least a third of the board’s width and lift.</small></li><li><strong>Throw along your line.</strong><small>Angle left or right. A longer stroke reaches higher. Start with a straight stroke just over half a board wide.</small></li><li><strong>Finish with a flick.</strong><small>A quick finish carries higher on a flatter arc. Ease off for a lower hit. A sideways flick trims your line.</small></li></ol><p class="body-copy">Three darts per visit, three visits each. The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50. Highest total wins.</p><button class="primary full" id="okay">Got it</button>',
-    () => ($("#okay").onclick = () => $("#modal").close()),
+    () => {
+      $("#okay").onclick = () => $("#modal").close();
+      $("#sheet-title").onclick = probeTap;
+    },
   );
+}
+// Five quick taps on the help title toggle the viewport readout (src/probe.js),
+// and it stays on across launches until toggled off. For checking the installed
+// app on a phone; players never see it.
+const probeKey = "dartshift.probe";
+let probeTaps = [];
+function probeTap(event) {
+  probeTaps = [...probeTaps, event.timeStamp].filter((t) => event.timeStamp - t < 2500);
+  if (probeTaps.length < 5) return;
+  probeTaps = [];
+  import("./probe.js").then(({ toggleProbe }) => {
+    let on = true;
+    try {
+      on = localStorage.getItem(probeKey) !== "1";
+      if (on) localStorage.setItem(probeKey, "1");
+      else localStorage.removeItem(probeKey);
+    } catch {
+      /* On for this session only. */
+    }
+    toggleProbe(on);
+  });
+}
+try {
+  if (localStorage.getItem(probeKey) === "1" || /[?&]viewport\b/.test(location.search))
+    import("./probe.js").then(({ toggleProbe }) => toggleProbe(true));
+} catch {
+  /* No readout. */
 }
 function start(mode) {
   match = freshMatch(mode);
@@ -558,6 +589,20 @@ window.addEventListener("blur", () => cancelAim());
 window.addEventListener("resize", () => cancelAim());
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) cancelAim();
+});
+// The room's height comes from the screen in the installed app (src/viewport.js).
+// Check again whenever the window may have changed: rotation, returning from the
+// background or the app switcher. iOS can report the new width a frame after
+// the event, so look again then. A change re-measures the resting dart.
+function refit() {
+  if (fitScreen()) cancelAim();
+  requestAnimationFrame(() => fitScreen() && cancelAim());
+}
+fitScreen();
+for (const type of ["resize", "orientationchange", "pageshow"])
+  addEventListener(type, refit);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refit();
 });
 
 // An update reload returns straight to the match it interrupted.

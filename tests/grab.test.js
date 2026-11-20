@@ -38,6 +38,9 @@ test("the target never shrinks below a thumb", () => {
 // Measured in WebKit with simulated safe areas: board width, the touch target's
 // lowest point (the worst place to start a stroke), the dart's centre and the
 // safe frame. The smallest screen in each orientation, plus the notched landscape.
+// These are the full-screen layouts. Re-measured in Chromium with the installed
+// app's short layout viewport (scripts/check/viewport.cjs): --vh puts every value
+// back exactly here (see DECISIONS.md, "Full screen in the installed app").
 const layouts = [
   { size: "320×568", board: 288, bottom: 544, cx: 160, frame: [0, 20, 320] },
   { size: "667×375", board: 293.5, bottom: 387, cx: 319.5, frame: [0, 0, 667] },
