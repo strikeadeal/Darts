@@ -138,6 +138,20 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
 }
+/* The installed iPhone app (src/viewport.js). iOS 26+ lays it out a status bar
+   short of the screen and paints and hit-tests nothing below that while the
+   root clips at it. A visible root with a normal-flow body as tall as the
+   screen gets the whole screen back, and WebKit's own innerHeight and 100dvh
+   then read the full height too. Body's overflow: hidden still passes to the
+   viewport, so the page can't scroll. Measured on an iPhone 14 Pro, iOS 27. */
+:root[data-screen] {
+  height: auto;
+  overflow: visible;
+}
+:root[data-screen] body {
+  height: auto;
+  min-height: var(--vh);
+}
 body {
   margin: 0;
   background: var(--night);

@@ -49,6 +49,9 @@ test("the stylesheet sizes the screen only through --vh", () => {
   const lines = css.split("\n");
   const viewportUnits = lines.filter((l) => /\d+(d|s|l)?vh\b/.test(l) && !l.includes("--vh:"));
   assert.deepEqual(viewportUnits, [], "use var(--vh)");
+  // The installed app's document reaches the screen's bottom (the readout's "flow").
+  assert.match(css, /:root\[data-screen\] \{\s*height: auto;\s*overflow: visible;/);
+  assert.match(css, /:root\[data-screen\] body \{\s*height: auto;\s*min-height: var\(--vh\);/);
   for (const layer of [".scene {", "#panel {"]) {
     const rule = css.slice(css.indexOf("\n" + layer), css.indexOf("}", css.indexOf("\n" + layer)));
     assert.match(rule, /height: var\(--vh\)/, layer);
