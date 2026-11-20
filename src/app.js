@@ -379,6 +379,22 @@ function sheet(title, body, bind) {
   $("#close").onclick = () => $("#modal").close();
   bind?.();
 }
+let recorder, loadingRecorder;
+function loadRecorder() {
+  return loadingRecorder ??= import("./recorder.js").then(module => {
+    recorder = module;
+    module.restore();
+    return module;
+  });
+}
+async function openRecorder() {
+  (await loadRecorder()).controls(sheet);
+}
+try {
+  if (localStorage.getItem("dartshift.recording"))
+    await loadRecorder(); // Restore opt-in before a resumed match can accept its first touch.
+} catch { /* Optional diagnostics. */ }
+
 function help() {
   sheet(
     "How to play",
@@ -386,6 +402,12 @@ function help() {
     () => {
       $("#okay").onclick = () => $("#modal").close();
       $("#sheet-title").onclick = probeTap;
+      let taps = [];
+      $("#sheet .steps li").onpointerup = (event) => {
+        taps = taps.filter(t => event.timeStamp - t < 2500);
+        taps.push(event.timeStamp);
+        if (taps.length === 5) openRecorder();
+      };
     },
   );
 }
@@ -612,6 +634,7 @@ function play(impactClass = "", leaving = false) {
       say(text);
     },
     skipped,
+    (event, width) => recorder?.begin(event, width),
   ));
   // Re-measure the resting grip once the camera arrives at the oche.
   Promise.allSettled(stage.getAnimations().map((a) => a.finished)).then(() => {
@@ -867,3 +890,5 @@ if ("serviceWorker" in navigator) {
       /* Online play remains available when workers are disabled. */
     });
 }
+
+if (new URLSearchParams(location.search).has("record")) openRecorder();

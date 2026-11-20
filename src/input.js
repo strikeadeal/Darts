@@ -45,7 +45,7 @@ function measure(field) {
 
 // `skipped(event)` is the dart's painted box from before a camera move that this
 // touch finished early, so a touch where the player saw the dart still lands on it.
-export function bindThrows(field, wakeAudio, land, hint, skipped) {
+export function bindThrows(field, wakeAudio, land, hint, skipped, beginTrace) {
   const board = field.querySelector(".board-wrap");
   const dart = field.querySelector(".ready-dart");
   const keyboardButton = field.querySelector("#throw");
@@ -73,6 +73,7 @@ export function bindThrows(field, wakeAudio, land, hint, skipped) {
     cancelAnimationFrame(pending);
     pending = 0;
     const id = stroke?.id;
+    stroke?.trace?.finish("cancelled");
     stroke = keyboardAim = held = null;
     keyboardButton.classList.remove("held");
     sight.setAttribute("visibility", "hidden");
@@ -126,17 +127,18 @@ export function bindThrows(field, wakeAudio, land, hint, skipped) {
     wakeAudio();
     keyboardButton.classList.add("held");
     const geo = measure(field);
-    stroke = { id: event.pointerId, x, y, width: geo.width, geo, samples: [] };
+    stroke = { id: event.pointerId, x, y, width: geo.width, geo, samples: [], trace: beginTrace?.(event, geo.width) };
     sample(event);
     field.setPointerCapture(event.pointerId);
     if (!motion.matches) paintHand();
   };
-  function sample(event) {
+  function sample(event, type = event.type) {
+    stroke.trace?.sample(event, type);
     addSample(stroke.samples, event.clientX, event.clientY, event.timeStamp);
   }
   field.onpointermove = (event) => {
     if (stroke?.id !== event.pointerId) return;
-    for (const move of event.getCoalescedEvents?.() || []) sample(move);
+    for (const move of event.getCoalescedEvents?.() || []) sample(move, "coalesced");
     sample(event);
     if (!pending && !motion.matches) pending = requestAnimationFrame(paintHand);
   };
@@ -146,6 +148,7 @@ export function bindThrows(field, wakeAudio, land, hint, skipped) {
     const { geo } = stroke;
     const point = releaseThrow(stroke, stroke.samples, stroke.width);
     const read = point && readStroke(stroke, stroke.samples, stroke.width);
+    stroke.trace?.finish(point ? "thrown" : "rejected", read, point);
     cancelAnimationFrame(pending);
     pending = 0;
     stroke = null;
@@ -158,7 +161,10 @@ export function bindThrows(field, wakeAudio, land, hint, skipped) {
     }
   };
   field.onpointercancel = field.onlostpointercapture = (event) => {
-    if (stroke?.id === event.pointerId) reset();
+    if (stroke?.id === event.pointerId) {
+      stroke.trace?.sample(event, event.type);
+      reset();
+    }
   };
   field.oncontextmenu = (event) => event.preventDefault();
   keyboardButton.onkeydown = (event) => {

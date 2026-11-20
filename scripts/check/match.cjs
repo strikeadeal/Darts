@@ -1,9 +1,9 @@
 // One complete match through the visible controls. Needs Playwright; not part of the build.
-// node scripts/check/match.cjs <chromium|webkit> <built dir> <WxH> <solo|duel> <touch|mouse|keyboard> <reduced motion 0|1> [rush|301]
+// node scripts/check/match.cjs <chromium|webkit> <built dir> <WxH> <solo|duel> <touch|mouse|keyboard> <reduced motion 0|1> [rush|301] [60|120 Hz]
 // 301 by keyboard plays a fixed route: every bust type, then a checkout on D3 (player 2 misses throughout).
 const pw = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 const http = require("http"), fs = require("fs"), path = require("path");
-const [, , engine, rootArg, size, mode, input, rm, game = "rush"] = process.argv;
+const [, , engine, rootArg, size, mode, input, rm, game = "rush", rate] = process.argv;
 const x01 = game === "301", saveKey = x01 ? "dartshift.301.v1" : "dartshift.save.v1";
 // Board mm on the 20–3 line: T20 -103, S20 -130, D20 -166, Bull 0, S3 130, T3 103, D3 166, miss 190.
 const route = [-103, -103, -103, /* 121 */ -103, -103, /* left on 1 */ -103, -130, 0, /* below zero */ -103, -130, 103, /* 32 */ -130, 130, 103, /* zero off a treble */ -130, 166, 166 /* D3 game shot */]; const root = path.resolve(rootArg);
@@ -16,8 +16,38 @@ const fail = (m) => { throw new Error(m); };
 (async () => {
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const touch = input === "touch";
-  const b = await pw[engine].launch();
+  const hz = Number(rate);
+  if (rate && (engine !== "chromium" || ![60, 120].includes(hz))) fail("Use Chromium and 60 or 120 Hz");
+  const b = await pw[engine].launch(hz === 120 ? { args: ["--disable-frame-rate-limit", "--disable-gpu-vsync", "--run-all-compositor-stages-before-draw"] } : {});
   const ctx = await b.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2, hasTouch: touch, isMobile: touch, serviceWorkers: "block", reducedMotion: rm === "1" ? "reduce" : "no-preference" });
+  // This host delivers native 60 Hz callbacks. For the 120 Hz case, pace
+  // callbacks on an uncapped compositor. CSS/WAAPI retain their own clocks.
+  if (hz === 120) await ctx.addInitScript((hz) => {
+    const nativeFrame = window.requestAnimationFrame.bind(window);
+    const step = 1000 / hz;
+    const callbacks = new Map();
+    let id = 0, pending = false, next = performance.now();
+    function tick(now) {
+      if (now < next) { nativeFrame(tick); return; }
+      next += step * Math.max(1, 1 + Math.floor((now - next) / step));
+      pending = false;
+      const ids = [...callbacks.keys()];
+      for (const id of ids) {
+        const cb = callbacks.get(id);
+        callbacks.delete(id);
+        cb?.(now);
+      }
+    }
+    window.requestAnimationFrame = (cb) => {
+      callbacks.set(++id, cb);
+      if (!pending) {
+        pending = true;
+        setTimeout(() => nativeFrame(tick), Math.max(0, next - performance.now() - 2));
+      }
+      return id;
+    };
+    window.cancelAnimationFrame = id => callbacks.delete(id);
+  }, hz);
   const [t, bo, l, r] = insets;
   await ctx.addInitScript((css) => addEventListener("DOMContentLoaded", () => { const s = document.createElement("style"); s.textContent = css; document.head.append(s); }), `:root{--top:${t}px!important;--bottom:${bo}px!important;--left:${l}px!important;--right:${r}px!important}`);
   await ctx.addInitScript(() => {
@@ -29,12 +59,13 @@ const fail = (m) => { throw new Error(m); };
   p.on("pageerror", (e) => errors.push(String(e)));
   p.on("console", (m) => m.type() === "error" && !/Service Worker/.test(m.text()) && errors.push(m.text()));
   const cdp = touch ? await ctx.newCDPSession(p) : null;
-  const tp = (type, x, y) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y }] });
+  const tp = (type, x, y, at) => cdp.send("Input.dispatchTouchEvent", { type, ...(at && {timestamp: at / 1000}), touchPoints: type === "touchEnd" ? [] : [{ x, y }] });
   async function stroke(x, y, dx, dy, ms) {
-    const steps = Math.max(3, Math.round(ms / 16));
-    if (touch) await tp("touchStart", x, y); else { await p.mouse.move(x, y); await p.mouse.down(); }
-    for (let k = 1; k <= steps; k++) { await sleep(ms / steps); const X = x + (dx * k) / steps, Y = y + (dy * k) / steps; if (touch) await tp("touchMove", X, Y); else await p.mouse.move(X, Y); }
-    if (touch) await tp("touchEnd"); else await p.mouse.up();
+    const steps = Math.max(3, Math.round(ms / (rate ? 1000 / hz : 16)));
+    const at = Date.now();
+    if (touch) await tp("touchStart", x, y, rate ? at : undefined); else { await p.mouse.move(x, y); await p.mouse.down(); }
+    for (let k = 1; k <= steps; k++) { await sleep(ms / steps); const X = x + (dx * k) / steps, Y = y + (dy * k) / steps; if (touch) await tp("touchMove", X, Y, rate ? at + ms * k / steps : undefined); else await p.mouse.move(X, Y); }
+    if (touch) await tp("touchEnd", 0, 0, rate ? at + ms + 1000 / hz : undefined); else await p.mouse.up();
   }
   async function tap(sel) {
     const bb = await p.locator(sel).boundingBox();
@@ -116,6 +147,21 @@ const fail = (m) => { throw new Error(m); };
   if (x01 && check.rush && Object.keys(check.rush).join() !== "match,best,muted,acknowledged") fail("save.v1 shape " + JSON.stringify(check.rush));
   if (input === "keyboard") { const id = await p.evaluate(() => document.activeElement?.id); if (id !== "again") fail("results focus on " + id); }
   if (errors.length) fail("errors: " + errors.join(" | "));
+  if (rate) {
+    // Sample contiguous callbacks independently of the game's idle intervals.
+    const intervals = await p.evaluate(() => new Promise(resolve => {
+      const times = [];
+      function nextFrame(ts) {
+        times.push(ts);
+        if (times.length < 25) requestAnimationFrame(nextFrame);
+        else resolve(times.slice(1).map((t,i) => t - times[i]).sort((a,b) => a - b));
+      }
+      requestAnimationFrame(nextFrame);
+    }));
+    const median = intervals[12];
+    if (Math.abs(median - 1000 / hz) > 2) fail("callback cadence " + median);
+    console.log(`App frame callbacks ${hz} Hz · median ${median.toFixed(2)} ms`);
+  }
   console.log(`OK ${engine} ${game} ${size} ${mode} ${input} rm=${rm} hits=${check.hits} totals=${check.totals} "${check.title}" busts=${busts} offDart=${offDart} skipPickups=${skipPickups}`);
   await b.close(); server.close();
 })().catch((e) => { console.log(`FAIL ${engine} ${game} ${size} ${mode} ${input} rm=${rm}: ${e.message.split("\n")[0]}`); process.exit(1); });
