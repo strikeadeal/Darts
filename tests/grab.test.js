@@ -7,13 +7,20 @@ import { scoreAt, radii } from "../src/game.js";
 const dart = { left: 170, top: 612, width: 51, height: 138 };
 
 test("a stroke picks the dart up only on it or just around it", () => {
-  const { pad } = tune.grab;
-  const cx = dart.left + dart.width / 2;
+  const { pad, tall } = tune.grab;
+  const cx = dart.left + dart.width / 2,
+    cy = dart.top + dart.height / 2;
+  // `tall` stretches the padded target's height about the dart's middle; its width stays.
+  const reach = ((dart.height + 2 * pad) * tall) / 2;
+  assert.ok(tall > 1);
   assert.ok(onDart(cx, dart.top + 70, dart));
   assert.ok(onDart(dart.left - pad, dart.top, dart)); // forgiving edge
-  assert.ok(onDart(dart.left + dart.width + pad, dart.top + dart.height + pad, dart));
+  assert.ok(onDart(dart.left + dart.width + pad, cy + reach - 0.01, dart));
+  assert.ok(onDart(cx, cy - reach + 0.01, dart));
+  assert.ok(!onDart(cx, cy + reach + 1, dart));
+  assert.ok(!onDart(cx, cy - reach - 1, dart));
   assert.ok(!onDart(dart.left - pad - 1, dart.top + 70, dart));
-  assert.ok(!onDart(cx, dart.top - pad - 1, dart));
+  assert.ok(!onDart(dart.left + dart.width + pad + 1, cy, dart));
   assert.ok(!onDart(cx, 300, dart)); // on the board
   assert.ok(!onDart(cx + 120, dart.top + 70, dart)); // beside the dart on the floor
 });
@@ -31,22 +38,24 @@ test("the target never shrinks below a thumb", () => {
   const speck = { left: 100, top: 100, width: 2, height: 2 };
   const half = tune.grab.min / 2;
   assert.ok(onDart(101 + half - 0.5, 101, speck));
-  assert.ok(onDart(101, 101 - half + 0.5, speck));
+  assert.ok(onDart(101, 101 - half * tune.grab.tall + 0.5, speck));
   assert.ok(!onDart(101 + half + 0.5, 101, speck));
 });
 
 // Measured in WebKit with simulated safe areas: board width, the touch target's
 // lowest point (the worst place to start a stroke), the dart's centre and the
 // safe frame. The smallest screen in each orientation, plus the notched landscape.
+// The lowest point includes `grab.tall`: 10% of the padded dart's height (83, 69 and
+// 61 px painted, measured in Chromium) below the measured padded edge.
 // These are the full-screen layouts. Re-measured in Chromium with the installed
 // app's short layout viewport (scripts/check/viewport.cjs): --vh puts every value
 // back exactly here (see DECISIONS.md, "Full screen in the installed app").
 const layouts = [
-  { size: "320×568", board: 288, bottom: 544, cx: 160, frame: [0, 20, 320] },
-  { size: "667×375", board: 293.5, bottom: 387, cx: 319.5, frame: [0, 0, 667] },
-  { size: "852×393", board: 302, bottom: 387, cx: 409, frame: [59, 0, 793] },
+  { size: "320×568", board: 288, bottom: 554.7, cx: 160, frame: [0, 20, 320] },
+  { size: "667×375", board: 293.5, bottom: 396.3, cx: 319.5, frame: [0, 0, 667] },
+  { size: "852×393", board: 302, bottom: 395.5, cx: 409, frame: [59, 0, 793] },
   // The iPhone 14 Pro's own landscape insets (0, 20, 59, 59), read on the phone.
-  { size: "852×393 measured", board: 303, bottom: 388.5, cx: 409, frame: [59, 0, 793] },
+  { size: "852×393 measured", board: 303, bottom: 397, cx: 409, frame: [59, 0, 793] },
 ];
 
 test("every bed is reachable from the dart with a comfortable clean flick on the smallest screens", () => {

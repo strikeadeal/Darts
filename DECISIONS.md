@@ -138,7 +138,7 @@ Two problems: a throw could start anywhere on the playfield, and players said a 
 
 ### Gesture
 
-- **A stroke starts only on the dart.** The target is the dart's painted outline at rest, grown by 12 px on every side and never under 48 px across (`tune.grab` in `src/throw.js`, tested in `tests/grab.test.js`). The painted dart is at least 40×83 px (320×568), so the target is 64×107 px there and 64–75 px wide everywhere. That clears the 44 px iOS minimum without reaching the board or the floor beside the dart.
+- **A stroke starts only on the dart.** The target is the dart's painted outline at rest, grown by 12 px on every side and never under 48 px across, then made 20% taller about its middle (`tune.grab` in `src/throw.js`, tested in `tests/grab.test.js`; see "Taller pickup"). The painted dart is at least 40×83 px (320×568), so the target is 64×128 px there and 64–75 px wide everywhere. That clears the 44 px iOS minimum without reaching the board or the floor beside the dart.
 - **Pickup.** Touching the dart draws it back into the existing hand pose and dims the prompt, so the finger clearly has it. The dart's resting drop shadow is dropped at the same moment (see Lag).
 - **A touch elsewhere** costs nothing and never throws. The prompt turns amber with "Touch the dart to pick it up" (also announced to VoiceOver) and the dart pulses once. A touch that is spent finishing a camera move or effect gets no cue, so tapping to skip stays quiet.
 - **After a skipped camera move.** The room's capture-phase handler now rewinds the running moves to their start, notes where the dart was, then finishes them. The target spans from there to where the dart settles, so a touch anywhere on the path the player saw the dart travel picks it up. A touch after the move has ended uses the settled dart only.
@@ -766,6 +766,15 @@ Players reported the swipe as too sensitive and said they couldn't hit the lower
 - **Model players re-centred to match:** natural peak 3.2 → 4.5 (casual), 3.0 → 4.3 (skilled), and first-time players drawn around 4.5. Difficulty is about unchanged, as it should be: casual 9.2% T20, 157 Nine Dart Rush, 25.2 darts for 301 (77.2% within ten rounds); skilled 38.4%, 315, 11.2. First darts on the board 98–99%; median miss 50 mm at dart 1, about 31 by dart 6.
 - **Cost: more touch noise at the top on 60 Hz.** A faster flick at the top spans fewer frames, so touch sampling alone now spreads a skilled D20 by 5.6 mm (1σ, height) at 60 Hz and 2.1 mm at 120 Hz, against 3.1 and 1.5 before; T20 3.9 and 1.7. The bull and the lower half are unaffected. A longer reading window (0.2 or 0.25 widths) didn't help, because the spread comes from not knowing exactly when the finger lifted. This misses the 3 mm touch-noise target at the top on 60 Hz screens.
 - **Tests and checks.** Two tests used fixed speeds of 2.8 for the neutral; they now use `cruise`, or scale their paths to it. The browser check throws its neutral at 4, its fast at 8 and its slow at 2.
+
+## Taller pickup · 20 November 2026
+
+Players found the area that starts a flick too small: touches just above or below the dart got "Touch the dart to pick it up". `tune.grab.tall` (1.2) makes the pickup target 20% taller, centred on the dart, and leaves its width alone.
+
+- **Size.** On a 393×852 phone the dart is painted 138 px tall, so the target grows from 162 to 194 px: 16 px more above and below. On 320×568 it grows from 107 to 128 px.
+- **Width unchanged,** so a touch beside the dart on the floor still doesn't pick it up.
+- **The reach test starts lower.** Its start points (the target's lowest point) moved down by 10% of the padded dart height: 554.7, 396.3, 395.5 and 397 px. Every bed is still reachable with a comfortable flick from there.
+- **Checked in Chromium at 393×852:** a touch 4 px above or below the old target now picks up the dart and throws, where it was refused before; 4 px to the side is still refused.
 
 ## The flick verification · 20 November 2026
 

@@ -76,8 +76,9 @@ export const tune = {
   // by `pad` on every side and never smaller than `min` across (CSS px). iOS asks
   // for 44 px; the painted dart alone is at least 40 px wide on the smallest screen.
   grab: {
-    pad: 12,
+    pad: 12, // px around the painted dart where a touch still picks it up
     min: 48,
+    tall: 1.2, // the target's height × this, centred on the dart (width unchanged)
   },
 };
 
@@ -93,7 +94,7 @@ export function onDart(x, y, box, seen) {
   const width = Math.max(box.left + box.width, seen ? seen.left + seen.width : -Infinity) - left,
     height = Math.max(box.top + box.height, seen ? seen.top + seen.height : -Infinity) - top;
   const halfW = Math.max(width + 2 * g.pad, g.min) / 2;
-  const halfH = Math.max(height + 2 * g.pad, g.min) / 2;
+  const halfH = (Math.max(height + 2 * g.pad, g.min) * g.tall) / 2;
   return (
     Math.abs(x - left - width / 2) <= halfW &&
     Math.abs(y - top - height / 2) <= halfH
