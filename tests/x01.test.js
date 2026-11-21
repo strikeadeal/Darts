@@ -32,6 +32,12 @@ const throwAll = (match, names) =>
   names.reduce((m, n) => advance(m, bed(n)), match);
 const solo = (...names) => throwAll(freshMatch("solo", "301"), names);
 const duel = (...names) => throwAll(freshMatch("duel", "301"), names);
+// Double out: a 301 match saved before first to zero (no `finish`), which still
+// replays under its own rules (DECISIONS.md, "First to zero"). The double-out
+// tests below are restated on these saves; tests/zero.test.js has the new rules.
+const old = (mode) => ({ game: "301", mode, hits: [] });
+const legacySolo = (...names) => throwAll(old("solo"), names);
+const legacyDuel = (...names) => throwAll(old("duel"), names);
 const ton80 = ["T20", "T20", "T20"]; // 301 → 121
 
 test("the bed helper hits what it says", () => {
@@ -60,42 +66,42 @@ test("bust below zero ends the visit at once and restores its start", () => {
   assert.deepEqual([s.round, s.dart], [3, 1]);
 });
 
-test("bust when left on 1, even on the first dart of a visit", () => {
-  let s = status(solo(...ton80, "T20", "T20")); // 121 → 61 → 1
+test("double out: bust when left on 1, even on the first dart of a visit", () => {
+  let s = status(legacySolo(...ton80, "T20", "T20")); // 121 → 61 → 1
   assert.equal(s.visits[1].bust, "one");
   assert.equal(s.visits[1].hits.length, 2);
   assert.equal(s.totals[0], 121);
   // A new visit on 41: D20 leaves 1 with the first dart.
-  s = status(solo(...ton80, "T20", "20", "Miss", "D20"));
+  s = status(legacySolo(...ton80, "T20", "20", "Miss", "D20"));
   assert.equal(s.visits[2].bust, "one");
   assert.equal(s.visits[2].hits.length, 1);
   assert.equal(s.totals[0], 41);
   assert.deepEqual([s.round, s.dart], [4, 1]);
 });
 
-test("bust when reaching zero without a double, including the outer bull", () => {
+test("double out: bust when reaching zero without a double, including the outer bull", () => {
   // 301 → 121 → 61 → 41 → 21 (miss) | 20 single → zero off a single.
-  let m = solo(...ton80, "T20", "20", "20");
+  let m = legacySolo(...ton80, "T20", "20", "20");
   assert.equal(status(m).totals[0], 21);
   let s = status(throwAll(m, ["T7"])); // 21 → 0 on a treble
   assert.equal(s.visits.at(-1).bust, "double");
   assert.equal(s.totals[0], 21);
   assert.equal(s.complete, false);
   // 25 left, outer bull: zero, but not a double.
-  m = solo(...ton80, "T20", "T12", "Miss"); // 121 → 61 → 25
+  m = legacySolo(...ton80, "T20", "T12", "Miss"); // 121 → 61 → 25
   s = status(throwAll(m, ["25"]));
   assert.equal(s.visits.at(-1).bust, "double");
   assert.equal(s.totals[0], 25);
 });
 
-test("checkouts on a double or the bull, on the first, second or third dart", () => {
+test("double out: checkouts on a double or the bull, on the first, second or third dart", () => {
   const to40 = [...ton80, "T20", "T7", "Miss"]; // 121 → 61 → 40
   for (const [route, darts] of [
     [["D20"], 1],
     [["Miss", "D20"], 2],
     [["20", "Miss", "D10"], 3],
   ]) {
-    const m = solo(...to40, ...route);
+    const m = legacySolo(...to40, ...route);
     const s = status(m);
     assert.equal(s.complete, true, route.join());
     assert.equal(s.out, true);
@@ -107,19 +113,19 @@ test("checkouts on a double or the bull, on the first, second or third dart", ()
     assert.equal(advance(m, bed("T20")), m, "no dart after the checkout");
   }
   // 50 on the bull.
-  const s = status(solo(...ton80, "T20", "11", "Miss", "Bull")); // 121 → 61 → 50 → 0
+  const s = status(legacySolo(...ton80, "T20", "11", "Miss", "Bull")); // 121 → 61 → 50 → 0
   assert.equal(s.out, true);
   assert.equal(s.visits.at(-1).hits.length, 1);
 });
 
-test("a duel checkout wins outright; the other player gets no reply", () => {
+test("double out: a duel checkout wins outright; the other player gets no reply", () => {
   // P1 180, P2 nothing, P1 121 → 61 → D? 61 → T7 → 40, D20.
-  const m = duel(...ton80, "Miss", "Miss", "Miss", "T20", "T7", "D20");
+  const m = legacyDuel(...ton80, "Miss", "Miss", "Miss", "T20", "T7", "D20");
   const s = status(m);
   assert.deepEqual([s.complete, s.winner, s.totals], [true, 0, [0, 301]]);
   assert.equal(advance(m, bed("T20")), m);
   // Turns alternate after a bust too.
-  const b = status(duel(...ton80, "Miss", "Miss", "Miss", "T20", "T20"));
+  const b = status(legacyDuel(...ton80, "Miss", "Miss", "Miss", "T20", "T20"));
   assert.equal(b.visits[2].bust, "one");
   assert.deepEqual([b.player, b.round, b.dart, b.totals], [1, 2, 1, [121, 301]]);
 });
@@ -141,11 +147,11 @@ test("ten rounds each: lowest remaining wins a duel, level scores draw, solo jus
   assert.deepEqual([s.complete, s.winner], [true, 1]);
 });
 
-test("a mid-match save, including one that just bust, rebuilds exactly", () => {
+test("double out: a mid-match save, including one that just bust, rebuilds exactly", () => {
   const cases = [
-    duel(...ton80, "T20"), // mid visit
-    duel(...ton80, "Miss", "Miss", "Miss", "T20", "T20"), // P1 just bust, card not yet acknowledged
-    solo(...ton80, "T20", "T19", "T20"), // solo bust below zero
+    legacyDuel(...ton80, "T20"), // mid visit
+    legacyDuel(...ton80, "Miss", "Miss", "Miss", "T20", "T20"), // P1 just bust, card not yet acknowledged
+    legacySolo(...ton80, "T20", "T19", "T20"), // solo bust below zero
   ];
   for (const m of cases) {
     const saved = decodeMatch(JSON.parse(JSON.stringify(m)));
@@ -167,12 +173,12 @@ test("a 301 save is rejected if it holds darts after the end, or an unknown game
   assert.equal(decodeMatch({ mode: "solo", hits: Array(10).fill(bed("Miss")) }), null);
 });
 
-test("every checkout route is valid, finishes on a double and never busts", () => {
+test("double out: every checkout route is valid, finishes on a double and never busts", () => {
   const bogeys = [169, 168, 166, 165, 163, 162, 159];
   const value = (l) =>
     l === "Bull" ? 50 : l === "25" ? 25 : l[0] === "T" ? 3 * l.slice(1) : l[0] === "D" ? 2 * l.slice(1) : +l;
   for (let left = 2; left <= 170; left++) {
-    const route = checkout(left, 3);
+    const route = checkout(left, 3, true);
     if (bogeys.includes(left)) {
       assert.equal(route, null, left);
       continue;
@@ -188,14 +194,14 @@ test("every checkout route is valid, finishes on a double and never busts", () =
     // Fewest darts.
     if (left <= 40 && left % 2 === 0) assert.equal(route.length, 1);
   }
-  assert.deepEqual(checkout(40, 1), ["D20"]);
-  assert.deepEqual(checkout(50, 1), ["Bull"]);
-  assert.deepEqual(checkout(100, 3), ["T20", "D20"]);
-  assert.deepEqual(checkout(170, 3), ["T20", "T20", "Bull"]);
-  assert.deepEqual(checkout(110, 2), ["T20", "Bull"]);
-  assert.equal(checkout(111, 2), null);
-  assert.equal(checkout(41, 1), null);
-  for (const left of [0, 1, 171, 301, NaN]) assert.equal(checkout(left, 3), null);
+  assert.deepEqual(checkout(40, 1, true), ["D20"]);
+  assert.deepEqual(checkout(50, 1, true), ["Bull"]);
+  assert.deepEqual(checkout(100, 3, true), ["T20", "D20"]);
+  assert.deepEqual(checkout(170, 3, true), ["T20", "T20", "Bull"]);
+  assert.deepEqual(checkout(110, 2, true), ["T20", "Bull"]);
+  assert.equal(checkout(111, 2, true), null);
+  assert.equal(checkout(41, 1, true), null);
+  for (const left of [0, 1, 171, 301, NaN]) assert.equal(checkout(left, 3, true), null);
 });
 
 // Saves as written by the current release (before 301): match, best, muted, acknowledged.
@@ -225,7 +231,7 @@ test("current saves load unchanged, mid-match and record included", () => {
 
 test("301 data stays out of save.v1 and survives an older copy rewriting it", () => {
   const state = readSaves(v1, null);
-  state[301] = { match: solo(...ton80, "T20"), best: 12, acknowledged: -1 };
+  state[301] = { match: legacySolo(...ton80, "T20"), best: 12, acknowledged: -1 };
   state.lobby = "301";
   const out = JSON.parse(JSON.stringify(writeSaves(state)));
   assert.equal(out[saveKeys.rush].match.game, undefined);
@@ -271,7 +277,7 @@ test("the learn count has its own key and leaves the other three as they were", 
   const s = readSaves(JSON.parse(JSON.stringify(v1)), null, { rush: 300, 301: 9, carried: [] }, 12);
   assert.equal(s.learn, 12);
   const out = JSON.parse(JSON.stringify(writeSaves(s)));
-  assert.deepEqual(Object.keys(out), [saveKeys.rush, saveKeys.x01, saveKeys.flick, saveKeys.learn]);
+  assert.deepEqual(Object.keys(out), [saveKeys.rush, saveKeys.x01, saveKeys.flick, saveKeys.learn, saveKeys.zero]);
   assert.equal(out[saveKeys.learn], 12);
   assert.deepEqual(Object.keys(out[saveKeys.rush]), ["match", "best", "muted", "acknowledged"]);
   assert.deepEqual(Object.keys(out[saveKeys.flick]).sort(), ["301", "carried", "rush"]);

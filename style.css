@@ -495,6 +495,56 @@ p {
     700 20px/1 system-ui,
     sans-serif;
 }
+/* 301's finishing highlight (src/art.js finishMark), over the board and under
+   the darts. Information only: it never takes a touch. It changes only after a
+   landing has settled or between visits, never at release or contact, and its
+   only motion is a short fade-in. */
+.finish {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  font:
+    700 20px/1 system-ui,
+    sans-serif;
+  text-anchor: middle;
+}
+.finish > g {
+  animation: finish-in 320ms ease-out;
+}
+@keyframes finish-in {
+  from {
+    opacity: 0;
+  }
+}
+.finish-edge {
+  fill: #ffc36a40;
+  stroke: #0b0c0a;
+  stroke-width: 6;
+  stroke-opacity: 0.85;
+  stroke-linejoin: round;
+}
+.finish-line {
+  fill: none;
+  stroke: #ffc36a;
+  stroke-width: 2.6;
+  stroke-linejoin: round;
+}
+/* The same number's treble and double score too much: darkened. */
+.finish-bust {
+  fill: #0b0c0a;
+  fill-opacity: 0.62;
+}
+.finish-badge {
+  fill: #ffc36a;
+  stroke: #0b0c0a;
+  stroke-width: 2.5;
+}
+.finish text {
+  fill: #101110;
+}
 /* The approach shadow: 200 board units about the impact, moved by the flight. */
 .approach {
   position: absolute;

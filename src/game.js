@@ -29,17 +29,27 @@ export function scoreAt(x, y) {
 }
 
 // A match is { mode: "solo" | "duel", hits } for Nine Dart Rush, the original
-// shape. 301 adds game: "301". mode is the player count either way. A duel
+// shape. 301 adds game: "301". mode is the player count either way. A 301 match
+// started since "First to zero" (DECISIONS.md) also has finish: "any"; one
+// without it was saved under double out and replays under double out. A duel
 // rematch adds first: 1 when "Player 2" throws first. The data never changes
 // order (index 0 always throws first); only the names and colours swap, so an
 // older copy that ignores the field still scores the match correctly.
 export function freshMatch(mode, game, first = 0) {
-  const match = game === "301" ? { game, mode, hits: [] } : { mode, hits: [] };
+  const match = game === "301" ? { game, mode, finish: "any", hits: [] } : { mode, hits: [] };
   if (first === 1 && mode === "duel") match.first = 1;
   return match;
 }
 
-export const x01 = { start: 301, rounds: 10 }; // rounds per player
+export const x01 = {
+  start: 301,
+  rounds: 10, // per player
+  // The board highlights the finishing bed while the player about to throw has
+  // fewer than this left (finishTarget). The one place to change it.
+  highlightBelow: 20,
+};
+// A 301 match saved before first to zero, played to its end under double out.
+export const doubleOut = (match) => match?.game === "301" && match.finish !== "any";
 
 export function decodeMatch(value) {
   if (
@@ -53,6 +63,11 @@ export function decodeMatch(value) {
   if ("first" in value && !(value.mode === "duel" && value.first === 1)) {
     value = { ...value };
     delete value.first;
+  }
+  // Only a 301 match can be first to zero; any other value is dropped.
+  if ("finish" in value && !(value.game === "301" && value.finish === "any")) {
+    value = { ...value };
+    delete value.finish;
   }
   if (!value.game && value.hits.length > (value.mode === "solo" ? 9 : 18))
     return null;
@@ -103,7 +118,11 @@ export function status(match) {
   };
 }
 
-// 301, double out. A bust ends the visit and restores its starting score.
+// 301, first to exactly zero on any bed. Going below zero is a bust: it ends the
+// visit and restores its starting score. A double-out match (doubleOut) also
+// busts on 1 left, or on zero off anything but a double or the bull.
+// ponytail: "one" and "double" only replay double-out saves; delete them, isDouble
+// and checkoutDouble once no such save can be in progress.
 export const bustReasons = {
   over: "Below zero",
   one: "Left on 1",
@@ -112,6 +131,7 @@ export const bustReasons = {
 const isDouble = ({ points, label }) =>
   points === 50 || label.startsWith("Double");
 function count301(match) {
+  const strict = doubleOut(match);
   const players = match.mode === "solo" ? 1 : 2;
   const left = Array(players).fill(x01.start);
   const visits = [];
@@ -142,11 +162,13 @@ function count301(match) {
     v.bust =
       after < 0
         ? "over"
-        : after === 1
-          ? "one"
-          : after === 0 && !isDouble(dart)
-            ? "double"
-            : null;
+        : !strict
+          ? null
+          : after === 1
+            ? "one"
+            : after === 0 && !isDouble(dart)
+              ? "double"
+              : null;
     if (v.bust) {
       left[v.player] = v.start;
       v.scored = 0;
@@ -186,7 +208,8 @@ function status301(match) {
   };
 }
 
-// A finishing route for `left` in at most `darts` darts, fewest darts first:
+// Double out (doubleOut matches only): a finishing route for `left` in at most
+// `darts` darts, fewest darts first:
 // labels such as ["T20", "D20"], or null when there is none. Set-up darts prefer
 // singles, then trebles (high first), then doubles and bulls; finishes prefer
 // D20, D16, D18, D12 and so on. A route never passes through a bust.
@@ -204,7 +227,7 @@ const finishes = new Map(
     ([label, points], i) => [points, { label, cost: i / 100 }],
   ),
 );
-export function checkout(left, darts = 3) {
+function checkoutDouble(left, darts) {
   if (!Number.isInteger(left) || left < 2 || left > 170) return null;
   if (finishes.has(left)) return [finishes.get(left).label];
   let best = null;
@@ -221,6 +244,57 @@ export function checkout(left, darts = 3) {
       for (const b of beds)
         if (b.points <= a.points) consider([a, b], left - a.points - b.points);
   return best?.route ?? null;
+}
+
+// A finishing route for `left` in at most `darts` darts, or null: labels such as
+// ["T20", "D20"], highest-scoring dart first. Fewest darts first, then the
+// biggest beds: singles, the outer bull, doubles, trebles, the bull (by area:
+// about 3,800, 670, 420, 260 and 130 mm²). Equal routes go to the higher first
+// dart. Any route that adds up can't bust: nothing below zero is ever left.
+// Pass true for a double-out match's routes.
+const anyBeds = [...beds]
+  .map((b) => ({ ...b, cost: b.label === "25" ? 2 : b.label === "Bull" ? 5 : { T: 4, D: 3 }[b.label[0]] ?? 1 }))
+  .sort((a, b) => b.points - a.points || a.cost - b.cost);
+const oneDart = new Map();
+for (const b of [...anyBeds].reverse()) if (!(oneDart.get(b.points)?.cost <= b.cost)) oneDart.set(b.points, b);
+function cheapest(left, darts, from = 0) {
+  const one = oneDart.get(left);
+  if (one && anyBeds.indexOf(one) >= from) return { cost: one.cost, route: [one.label] };
+  if (darts < 2) return null;
+  let best = null;
+  // ponytail: brute force, non-increasing scores (≤ 41,664 triples), well under 1 ms.
+  for (let i = from; i < anyBeds.length; i++) {
+    const a = anyBeds[i];
+    if (a.points >= left) continue;
+    const rest = cheapest(left - a.points, darts - 1, i);
+    if (!rest) continue;
+    const next = { cost: a.cost + rest.cost, route: [a.label, ...rest.route] };
+    if (!best || next.route.length < best.route.length || (next.route.length === best.route.length && next.cost < best.cost))
+      best = next;
+  }
+  return best;
+}
+export function checkout(left, darts = 3, double = false) {
+  if (double) return checkoutDouble(left, darts);
+  if (!Number.isInteger(left) || left < 1 || left > 180 || !(darts >= 1)) return null;
+  return cheapest(left, Math.min(3, darts))?.route ?? null;
+}
+
+// What the board highlights (DECISIONS.md, "First to zero"): the bed that
+// finishes for the player about to throw, as a checkout() label, or null. Only
+// while fewer than x01.highlightBelow are left, and only when one dart finishes.
+// It is the first slot of the scoreboard's route and the spoken checkout, so the
+// three always agree. Nothing between visits (the card is up and the slots are
+// closed), after the match, or in a double-out match.
+export function finishTarget(match, acknowledged) {
+  if (match?.game !== "301" || doubleOut(match)) return null;
+  const s = status(match),
+    last = s.visits.at(-1);
+  if (s.complete || (last?.closed && acknowledged !== match.hits.length)) return null;
+  const left = s.totals[s.player];
+  if (!(left < x01.highlightBelow)) return null;
+  const route = checkout(left, 4 - s.dart);
+  return route?.length === 1 ? route[0] : null;
 }
 
 export function advance(match, point) {
@@ -244,6 +318,7 @@ export const saveKeys = {
   x01: "dartshift.301.v1",
   flick: "dartshift.flick.v1",
   learn: "dartshift.learn.v1",
+  zero: "dartshift.301.v2",
 };
 // Touch darts a device throws while it gets bull-relative coaching (src/coach.js).
 export const learnDarts = 45;
@@ -257,14 +332,21 @@ const seen = (n, match) =>
 // finishing it sets no record. The first time the flick key is missing, that is
 // every match still in progress.
 // learn counts touch darts up to learnDarts (its own key, so no older shape changes).
-export function readSaves(v1, v301, flick, learn) {
+// zero is first-to-zero 301 (dartshift.301.v2): its match and its fewest-darts
+// record. 301.v1 keeps its shape: it holds only a double-out match, saved before
+// first to zero, until a new 301 match replaces it, and older copies, which read
+// only v1, never see a first-to-zero match (DECISIONS.md, "First to zero").
+export function readSaves(v1, v301, flick, learn, zero) {
   const a = v1 && typeof v1 === "object" ? v1 : {},
     b = v301 && typeof v301 === "object" ? v301 : {},
-    f = flick && typeof flick === "object" ? flick : null;
+    f = flick && typeof flick === "object" ? flick : null,
+    z = zero && typeof zero === "object" ? zero : {};
   const rush = decodeMatch(a.match),
-    three = decodeMatch(b.match);
+    three = decodeMatch(b.match),
+    next = decodeMatch(z.match);
   const r = rush && !rush.game ? rush : null,
-    t = three?.game === "301" ? three : null;
+    t = doubleOut(three) ? three : null,
+    n = next?.game === "301" && !doubleOut(next) ? next : null;
   const open = { rush: r && !status(r).complete, 301: t && !status(t).complete };
   return {
     muted: a.muted === true,
@@ -277,14 +359,16 @@ export function readSaves(v1, v301, flick, learn) {
       carried: gameNames.filter((g) => open[g] && (f ? Array.isArray(f.carried) && f.carried.includes(g) : true)),
     },
     learn: Number.isInteger(learn) && learn >= 0 ? Math.min(learn, learnDarts) : 0,
+    zero: { match: n, best: record(z.best, 6, x01.rounds * 3), acknowledged: seen(z.acknowledged, n) },
   };
 }
-export function writeSaves({ muted, lobby, rush, 301: t, flick, learn }) {
+export function writeSaves({ muted, lobby, rush, 301: t, flick, learn, zero }) {
   return {
     [saveKeys.rush]: { match: rush.match, best: rush.best, muted, acknowledged: rush.acknowledged },
     [saveKeys.x01]: { match: t.match, best: t.best, acknowledged: t.acknowledged, lobby },
     [saveKeys.flick]: { rush: flick.rush, 301: flick[301], carried: flick.carried },
     [saveKeys.learn]: learn,
+    [saveKeys.zero]: { match: zero.match, best: zero.best, acknowledged: zero.acknowledged },
   };
 }
 // Before a write, keep the better of each record on disk and in memory, so a tab
@@ -297,6 +381,7 @@ export function mergeRecords(disk, mine) {
   mine[301].best = pick(disk[301].best, mine[301].best, Math.min);
   mine.flick.rush = pick(disk.flick.rush, mine.flick.rush, Math.max);
   mine.flick[301] = pick(disk.flick[301], mine.flick[301], Math.min);
+  mine.zero.best = pick(disk.zero.best, mine.zero.best, Math.min);
   mine.learn = Math.max(disk.learn, mine.learn);
   return mine;
 }

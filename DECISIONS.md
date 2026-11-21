@@ -953,3 +953,202 @@ After a finished match, once per session, the game asks for persistent storage w
 - the install card's wording and placement, which covers the neon and the record plate's label until dismissed;
 - whether the 12 px second line is legible on an SE;
 - where the update toast sits on a notched phone.
+
+## First to zero · 21 November 2026
+
+Two changes to 301: double out is gone, so the first player to reach exactly zero wins with any dart, and the board highlights the number that finishes once a player has fewer than 20 left. This supersedes "Double out, no double in", "The bull counts as a double", the "Bust" list and the "Checkout guide" in "301", and "A straight-out setting" in its "Left out". Nothing else in "301" changes.
+
+### Rules
+
+- **Start and count.** Each player counts down from 301, three darts per visit.
+- **First to exactly zero wins.** Any bed counts: a single, double, treble, the outer bull or the bull.
+- **Bust.** Only going below zero. The visit ends at once, and the score goes back to where it was at the start of that visit. Every dart of a bust visit still counts as thrown.
+- **Leaving 1 is no longer a bust,** because a single 1 now finishes.
+- **Unchanged:**
+  - A duel ends the moment a player reaches zero, with no reply visit.
+  - Ten rounds each. At the limit, the lowest remaining score wins and level scores draw.
+  - A solo run's record is the fewest darts.
+- **What the game calls it.** "First to zero", in plain words rather than the jargon "straight out":
+  - the neon sign reads FIRST TO ZERO over 301;
+  - the tagline is "Count down from 301. First to exactly zero wins.";
+  - the duel line is "First to zero wins.";
+  - the start announcement is "301, first to zero."
+  - "Checkout" stays as the word for a finishing route; it is not specific to doubles.
+
+### Saved matches keep the rules they began with
+
+A 301 match is rebuilt from its saved darts, so switching an old save to the new rules would replay it differently. An old "Not a double" bust would become a win, and an old "left on 1" bust would reopen a closed visit and pull the next visit's darts into it. That would change who won, or make the save invalid and drop it. So:
+
+- **A new 301 match carries `finish: "any"`.** A 301 match without it is double out and replays exactly as before (`doubleOut()` in `src/game.js`). The rules are in the data, so the replay is deterministic, and every save ever written is double out by construction.
+- **First-to-zero matches live in a new key,** `dartshift.301.v2`: `{ match, best, acknowledged }`.
+  - `dartshift.301.v1` keeps its exact shape and meaning. Its match is only ever a double-out match, and its `best` is the old throw's record.
+  - Older cached copies read and write only v1, `save.v1` and the flick key, so they never see a first-to-zero match. They can't misreplay one, or drop it as invalid and write `null` over it. That covers a rollback and a stale second tab, the case "Quick wins" #1 fixed for this build only.
+  - A marker in v1 alone was rejected for that reason. An older copy would replay a marked match under double out. Where busts closed its visits early, the darts would run past round ten, and its validator would reject the match and then save `null` over it.
+- **A double-out match in progress plays to its end under double out:**
+  - It is read from v1 and written back there.
+  - The scoreboard's side label reads "Double out", and the slots show double-out routes.
+  - The lobby's resume line ends "· double out", and the results eyebrow reads "301 · double out".
+  - Busts give the old reasons ("Not a double", "Left on 1").
+  - It shows no highlight: under double out, the single beds under 20 would bust.
+- **A new 301 match replaces it.** Starting one (after the usual "Switch modes?" question, or Play again) empties v1's match. If both slots ever hold a match (an older copy wrote v1 after this build wrote v2), v2 is shown and v1 is left untouched, so nothing is lost.
+- **Code kept for this, to delete later.** The double-out bust reasons and `checkoutDouble` stay only to replay these saves. The `ponytail:` note in `src/game.js` marks them for removal once no such save can be in progress.
+
+### Records
+
+- **The fewest-darts record starts again.** Finishing on any bed takes fewer darts, so the old records aren't comparable.
+  - The new record is `best` in `dartshift.301.v2` (6–30, fewest wins).
+  - `mergeRecords` keeps the lower one across tabs, as it does for the others.
+- **Old records are kept as they were and never written:**
+  - the double-out flick record (`dartshift.flick.v1`'s `301`);
+  - the old throw's record (`dartshift.301.v1`'s `best`).
+- **Shown until replaced.** Until a first-to-zero record exists, the lobby plate shows the newest older one with its label: "Fewest · double out", then "Fewest · old throw". This is the same pattern as "Best · old throw".
+- **A double-out match sets no record when it finishes.** It isn't comparable with either record. Its results say "Begun as double out · no record", like a match carried over from the old throw.
+
+### Checkout routes
+
+`checkout(left, darts)` in `src/game.js` returns the route the empty slots show and the screen reader speaks. With any bed finishing, a route that adds up can never bust, so the old rules about avoiding 1 and finishing on a double fall away.
+
+- **Fewest darts first.** For example, 40 is D20 rather than 20, 20, and 50 is the bull rather than 25, 25.
+- **Then the biggest beds.** Each dart costs by bed size: single 1, outer bull 2, double 3, treble 4, bull 5. The areas are about 3,800, 670, 420, 260 and 130 mm², and the flick model's hit rates follow the same order.
+  - So 30 is D15, not T10, and 41 is 25, 16.
+  - Under 21, the route is always the single of that number.
+- **Ties go to the higher first dart.** 35 is 20, 15, and 121 is T20, T20, 1. The darts are listed highest first.
+- **Impossible routes.** Scores from 181 up, and 169, 172, 173, 175, 176, 178 and 179, have no three-dart route, so the slots stay empty.
+- **Cost.** It searches by brute force over non-increasing darts. All 180 scores take about 15 ms in total (well under 1 ms each), so it still runs per render.
+
+### The finishing highlight
+
+**What it shows.** While the player about to throw has fewer than 20 left, the board shows the single bed that finishes: both of that number's single areas, the inner and the outer.
+- **The busting beds.** The same number's treble and double score two or three times the number, so they would bust. They are darkened (62% ink) inside the segment, which leaves two lit beds with the dark rings cutting between them.
+- **The rim number** gets an amber badge, so the segment can be found from the edge of the board before the eye reaches the beds.
+- **It is the route.** The highlight is the first slot of the scoreboard's route, read from the same `checkout()` call (`finishTarget` in `src/game.js`). The board, the slots and the spoken "Checkout: single 13" can't disagree.
+
+**Only the number itself, not every exact finish.** With 18 left, D9 and T6 also finish. They are left out:
+- **One target, one route.** The slots and the spoken text name one route. Lighting three beds in three segments would contradict them or need a longer announcement.
+- **The single is the right advice.** The two single beds of a number cover about 3,800 mm², roughly nine times a double and fifteen times a treble.
+- **The board stays readable.** Three lit areas in different parts of a 288 px board split the eye; one segment reads at a glance.
+
+**How it looks.** The look was chosen to read in the moving room, on the smallest screen and on every bed colour, without relying on colour alone:
+- **An edge.** A 6-unit ink edge sits under a 2.6-unit amber line, on the outline of the two beds. The dark edge carries it on cream singles and the amber on black singles, red and green.
+- **A tint.** A 25% amber fill makes the beds read as one shape.
+- **Shape and lightness carry the meaning** as well as hue: an outline, two dark gaps, and a filled badge with dark type.
+- **Rejected:**
+  - **Dimming the rest of the board** needs a board-sized layer repainted whenever the target changes, which is the cost "Grab and flight" removed. It would also darken the room's main object for most of the endgame.
+  - **A glow** needs a filter, which forces a re-render of whatever paints over it; "Grab and flight" measured filters as the main source of lag.
+  - **A pulse** would be an idle animation loop.
+- **Geometry.** It is drawn in `src/art.js` (`finishBeds`, `finishMark`) from the same `sectors`, `radii` and band paths as the face, inside the face's own matrix (`tune.camera.skew` and `faceHeight`). So it sits exactly on its beds in the board's foreshortened projection at any size, and moves with the camera like everything else on the board.
+
+**Where it lives.** It is drawn in its own small SVG (`.finish`) between the board and the darts:
+- `pointer-events: none`, so it never takes a touch.
+- `aria-hidden`.
+- Darts, the approach shadow, the keyboard sight and callouts all draw over it.
+- It never changes where a dart lands: the throw doesn't read it.
+
+**When it changes.** It is a function of the state on screen, never of a timer:
+- **After a dart that leaves the visit open,** it updates in the frame after contact, with the callout and the scoreboard. That is the frame that already morphs the plate. The contact frame itself is unchanged: only the dart is added there.
+  - Only the small `.finish` element is rewritten, and only when the target changes.
+  - The board layer is never repainted, and the stage is not rebuilt.
+- **After a bust or a visit's last dart,** it goes in that same frame, because the slots close and the card is coming. At a duel handoff it returns for whoever throws next when Pass to / Start round is pressed, with the dolly-in.
+- **On resuming a save,** after Update game or from the lobby, it is part of the board's first render.
+- **When the match ends,** it goes in the frame after the winning dart, and the results never show it.
+- **Entering:** a single 320 ms fade-in (`finish-in`), which ends with nothing left running. Leaving is instant.
+- **Reduced motion:** no fade, as for every animation.
+
+**It doesn't step back during the flick or the flight.**
+- It is the target, so it should be in view while the stroke aims at it.
+- It is static, so the moving dart is still the only thing in motion and keeps the eye.
+- Fading it at release would put a layer or a paint on the release frame, the one "Grab and flight" worked to keep empty.
+
+**Keyboard and screen readers.**
+- **Keyboard.** The `#sight` reticle draws over the highlight in its own black-and-white rings, so the two never merge.
+- **Screen readers** get the same information in words. After each dart and at each visit start, the announcement says "13 left. Checkout: single 13." The scoreboard's slots are labelled "Dart 1 of 3. Checkout single 13". The how-to-play text explains the outline and the darkened rings.
+
+### The threshold setting
+
+`x01.highlightBelow` in `src/game.js` (20) is the one place to change it. `finishTarget`, the help text and the tests read it.
+- **Raising it past 21** works: it then highlights whatever one-dart route `checkout()` gives. 21 is T7 and 40 is D20, each drawn on its own ring with the busting beds of that number darkened. 25 is the outer bull, with the bull darkened.
+- **Two-dart routes are never highlighted,** because they don't finish with the next dart.
+
+### What changed in the code
+
+- **`src/game.js`:**
+  - the `finish: "any"` marker, `doubleOut()`, and the bust rule by match;
+  - `checkout()` for any bed, with the double-out routes kept as `checkoutDouble`;
+  - `finishTarget()` and `x01.highlightBelow`;
+  - the `dartshift.301.v2` key in `readSaves`, `writeSaves` and `mergeRecords`.
+  - `scoreAt()` is untouched.
+- **`src/art.js`:** `finishBeds()`, `finishMark()`, and the `.finish` layer in `board()`. The face is unchanged.
+- **`src/app.js`:**
+  - which slot holds the 301 match;
+  - records and lobby labels;
+  - the copy;
+  - the highlight in `play()` and `landing()`.
+- **`style.css`:** the highlight's styles.
+- **Not changed:** `src/throw.js`, `tune`, `src/input.js`, Nine Dart Rush, the worker, `dartshift.save.v1`, `dartshift.flick.v1`, `dartshift.learn.v1` and `dartshift.resume`. The build still precaches 23 assets.
+
+## First to zero verification · 21 November 2026
+
+This session had Playwright with Chromium only. WebKit wasn't installed, and no Mac, simulator or iPhone was attached, so everything below is desktop Chromium under `/Darts/` with simulated safe-area insets.
+
+- **Automated.** All 60 Node tests pass.
+  - **12 new ones in `tests/zero.test.js`:**
+    - **Rules:** zero on a single (inner and outer), a double, a treble and each bull; below zero; leaving 1; finishing on the first, second and third dart; a duel won mid-visit by either player; the ten-round limit.
+    - **Routes:** every score from 1 to 180 with 1, 2 and 3 darts against an independent fewest-darts search, plus fixed routes.
+    - **Save policy:** a "Not a double" and a "left on 1" save, each mid-bust with its card unacknowledged, replaying unchanged; v1 written back byte-for-byte; v2 kept away from older copies' keys.
+    - **The highlight:** the 19/20 boundary; the beds for 1, 2, 3, 5, 6, 11, 18 and 19, sampled to 0.01 mm from each edge against `scoreAt`; agreement with the slots' route for every dart in hand; after a bust, at a duel handoff, after resuming; gone when the match ends by a finish or the round limit, and never in a double-out match.
+  - **Restated in `tests/x01.test.js`:** the six double-out tests now build their matches without the marker, as saves from before this change. The rules they check are what those saves still replay under. The learn-key test now expects the fifth key.
+  - **The tests fail when the logic breaks.** Eight deliberate breaks each failed at least one test:
+    - the 1-left bust applied to new matches;
+    - `<=` at the threshold;
+    - no handoff check;
+    - no end-of-match check;
+    - a highlight in double-out matches;
+    - beds one degree off;
+    - a wrong ring radius;
+    - trebles preferred over doubles.
+  - **Build:** 23 assets, as before.
+- **Complete matches** (`scripts/check/match.cjs`, all with clean consoles and results matching the saved hits). Before every 301 dart the runner checks three things: the highlight equals the remaining score under 20 and nothing at 20 or more; it equals the next slot's label; and its matrix equals the board face's.
+  - **301 keyboard route:** 121, then 1 left (no bust), a bust below zero, and down the single 3 to a game shot on it, in 15 darts with the highlight on 1, 18, 15, 12, 9, 6 and 3.
+    - Solo at 390×844 with and without reduced motion, and at 320×568 with it: record 15 in v2.
+    - Duels at 852×393 and 390×844 (reduced motion): Player 1 wins mid-visit, and Player 2 starts the rematch.
+  - **301 touch from the start:** solos at 393×852 and 320×568 (reduced motion), duels at 852×393 (reduced motion) and 667×375, and a mouse solo at 375×667. None of them came under 20.
+  - **301 touch from 19 or 13 (`SEED`):** solos at 393×852 and 320×568, and duels at 852×393 and 390×844 with and without reduced motion. The highlight followed busts and handoffs (19, 16, 14, 7, 11, …; 13, 11, 5, 2) and matched the slot on every dart.
+  - **Nine Dart Rush:** a touch solo at 390×844, a touch duel at 852×393 (reduced motion), and keyboard runs at 320×568 (duel, reduced motion) and 390×844 (solo).
+- **Alignment and screenshots** (`scripts/check/finish.cjs`). At all nine sizes (320×568, 360×740, 375×667, 375×812, 390×844, 393×852, 667×375, 852×393 and 932×430), on 1 and 5 (20's neighbours), 3 (bottom), 11 and 6 (the sides) and 19:
+  - The highlight's matrix equals the face's exactly (difference 0).
+  - On a 3 mm grid across the board, projected through that matrix, the lit fill covers exactly the points that score that single, and the dark fill exactly its treble and double. Points within 0.6 mm of a wire are skipped.
+  - A touch on it passes through.
+  - The slot reads the same number.
+  - The screenshots were checked by eye. The edge reads on cream (1, 5, 11) and black (3, 6, 19) beds, and the badge stays clear of the neighbouring numbers. The keyboard sight on the highlight, the lobby sign (FIRST TO ZERO fits at 320 px) and the help sheet were checked too.
+- **Performance.** `scripts/check/flight.cjs` (now with `SEED`), 390×844 @2, against the current main at f2dea07 built the same way.
+  - **Nine Dart Rush:** flight frames are unchanged, at a 16.7 ms median and 16.8 ms p95 at 4× and 6× CPU slowdown, with none over 25 ms. Contact and the frames after it are 16.7 ms median, as before.
+  - **301 on 19 with the highlight on:** the same. Main, playing the same position as double out without a highlight, gives identical figures.
+  - **Release to first frame** varies from run to run: three paired runs at 6× gave a median of 12.1–14.2 ms for main and 13.9–14.3 ms for this build, with the same release handler time.
+  - **At rest** nothing runs. The highlight's fade ends with no animation left, and under reduced motion `getAnimations()` is empty.
+  - **Limit of these figures.** Chromium rasterises off its throttled main thread, so as "Grab and flight" found, these frames can't show paint cost. The added paint is the small `.finish` element in the frame after a landing. Measuring that needs Safari's timeline on the phone.
+- **Old saves, updates and offline** (`scripts/check/update.cjs`, real service worker).
+  1. The current release (main at f2dea07) was left on a 301 "Left on 1" bust card, with mute on and best 450.
+  2. Update game to this build reloaded straight into that card ("Left on 1 · back to 121"), with "Updated · 301 is now first to zero…".
+  3. The next visit showed "Double out" and a double-out route, with no highlight. The v1 match was byte-for-byte unchanged, and the best and mute were kept.
+  4. With the server stopped, a reload launched from cache, resumed ("121 left · double out") and saved a dart.
+  5. Still offline, a new duel replaced it: v1 emptied, v2 has `finish: "any"`, T20 T20 left 1 without a bust, and 1 was lit.
+
+  `finish.cjs` also resumed a "Not a double" save in the lobby ("Fewest · double out 9", "21 left · double out"), played on to a bust below zero, and replaced it with a first-to-zero match.
+- **Not run.**
+  - WebKit and the iOS simulator.
+  - A rollback to an older copy in a browser; the unit tests cover older copies rewriting their keys.
+  - The 44 px control audit: no control changed.
+  - Tip alignment: no throw or flight code changed, and the highlight's matrix equals the face's.
+
+**Still to check on the phone:**
+- **The highlight at arm's length.** On an SE and on your phone, in portrait and landscape:
+  - get under 20 and check the outlined beds and the badge are obvious against cream and black segments, with the darkened treble and double clearly "not these";
+  - try 1 and 5 beside the 20, 3 at the bottom, and 11 or 6 at the sides.
+- **During play.**
+  - It shouldn't distract during the flick or the flight.
+  - The fade-in after a landing shouldn't hitch.
+  - It should go at once on a bust and on the winning dart.
+- **An old match.** If a 301 match is in progress when you press Update game, it should carry on as double out: "double out" in the lobby, "Double out" on the scoreboard, double routes, no highlight. Finishing it should say "Begun as double out · no record".
+- **Records.** The lobby should show your old 301 record as "Fewest · double out" until you set a first-to-zero one.
+- **VoiceOver on one visit under 20.** It should read "13 left. Checkout: single 13." after each dart.
+- **Safari timeline.** Ideally, a timeline of a few throws under 20 (Web Inspector), to see the frame after a landing with the highlight changing.

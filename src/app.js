@@ -4,6 +4,8 @@ import {
   advance,
   scoreAt,
   checkout,
+  finishTarget,
+  doubleOut,
   bustReasons,
   x01,
   readSaves,
@@ -13,7 +15,7 @@ import {
   mergeRecords,
 } from "./game.js";
 import { coach } from "./coach.js";
-import { icon, board, landed, readyDart } from "./art.js";
+import { icon, board, landed, readyDart, finishMark } from "./art.js";
 import { bindThrows, bindTurnButton, flyDart } from "./input.js";
 import { boardPosition } from "./throw.js";
 import { unlock, impact, whoosh, fanfare } from "./sound.js";
@@ -34,8 +36,8 @@ const read = (key) => {
 };
 // Each game keeps its own match, record and acknowledged visit (src/game.js
 // readSaves). `game` is the one on screen; match, best and acknowledged are its
-// copies, put back by use() and save(). `best` is the record set with the flick;
-// saves[game].best is the old throw's, kept as it was.
+// copies, put back by use() and save(). `best` is the record this build sets
+// (flick.rush, or zero.best for first-to-zero 301); the others are kept as they were.
 const keys = Object.values(saveKeys);
 const load = () => readSaves(...keys.map(read));
 // The raw saved strings as of this tab's last read or write. Anything else means
@@ -49,32 +51,38 @@ const snapshot = () => {
 };
 let seen = snapshot();
 const saves = load();
+// Where a game's match lives. 301's is first to zero (saves.zero), except a
+// double-out match saved before that change, which stays in saves[301] and plays
+// to its end under its own rules until a new 301 match replaces it.
+const slot = (g) => (g === "rush" ? saves.rush : saves.zero.match || !saves[301].match ? saves.zero : saves[301]);
+const recordOf = (g) => (g === "rush" ? saves.flick.rush : saves.zero.best);
 let game = saves.lobby;
-let { match, acknowledged } = saves[game];
-let best = saves.flick[game];
+let { match, acknowledged } = slot(game);
+let best = recordOf(game);
 let muted = saves.muted;
 let freshBest = false;
 let cancelAim = () => {};
 function stash() {
-  Object.assign(saves[game], { match, acknowledged });
-  saves.flick[game] = best;
+  Object.assign(slot(game), { match, acknowledged });
+  if (game === "rush") saves.flick.rush = best;
+  else saves.zero.best = best;
 }
 function use(next) {
   stash();
   game = saves.lobby = next;
-  ({ match, acknowledged } = saves[game]);
-  best = saves.flick[game];
+  ({ match, acknowledged } = slot(game));
+  best = recordOf(game);
   sign();
 }
-// A match begun before the flick sets no record when it ends.
-const carried = () => saves.flick.carried.includes(game);
+// A match begun before the flick, or a double-out match, sets no record when it ends.
+const carried = () => saves.flick.carried.includes(game) || doubleOut(match);
 function save() {
   stash();
   saves.muted = muted;
   try {
     // Never lower a record another tab set since this one last looked.
     if (snapshot() !== seen) mergeRecords(load(), saves);
-    best = saves.flick[game];
+    best = recordOf(game);
     for (const [key, value] of Object.entries(writeSaves(saves)))
       localStorage.setItem(key, JSON.stringify(value));
     seen = snapshot();
@@ -89,8 +97,8 @@ function refresh() {
   if (now === seen) return false;
   seen = now;
   Object.assign(saves, load(), { lobby: game });
-  ({ match, acknowledged } = saves[game]);
-  best = saves.flick[game];
+  ({ match, acknowledged } = slot(game));
+  best = recordOf(game);
   muted = saves.muted;
   audioButton();
   const shot = scene.dataset.shot;
@@ -139,7 +147,7 @@ function shoot(shot) {
 // update waits for the lobby, a handoff or the results, and the install card
 // shows only in the lobby. One at a time, the update first.
 // One line on what this release changed, shown once after Update game. Edit per release.
-const releaseNote = "Tips while you learn, safer records, and duels now take turns to start.";
+const releaseNote = "301 is now first to zero with any dart, and the board lights your finishing number.";
 const updatedKey = "dartshift.updated"; // session-only, set by Update game
 const installKey = "dartshift.install.v1"; // set once the install card is dismissed
 const notices = { update: false, later: false, install: false, updated: "" };
@@ -178,8 +186,8 @@ function installCheck() {
   }
   const played =
     finishedHere ||
-    [saves.flick.rush, saves.flick[301], saves.rush.best, saves[301].best].some((n) => n !== null) ||
-    [saves.rush.match, saves[301].match].some((m) => m && status(m).complete);
+    [saves.flick.rush, saves.flick[301], saves.zero.best, saves.rush.best, saves[301].best].some((n) => n !== null) ||
+    [saves.rush.match, saves[301].match, saves.zero.match].some((m) => m && status(m).complete);
   notices.install = !dismissed && !notices.installSeen && played;
   toasts();
 }
@@ -383,13 +391,14 @@ const games = {
   },
   301: {
     name: "301",
-    neon: ["DOUBLE OUT", "301"],
-    tagline: "Count down from 301. Finish on a double.",
+    neon: ["FIRST TO ZERO", "301"],
+    tagline: "Count down from 301. First to exactly zero wins.",
     solo: "Fewest darts to zero.",
-    duel: "First to zero on a double wins.",
+    duel: "First to zero wins.",
     rounds: x01.rounds,
     bestLabel: "Fewest darts",
     oldLabel: "Fewest · old throw",
+    doubleLabel: "Fewest · double out",
   },
 };
 const is301 = () => game === "301";
@@ -414,7 +423,7 @@ const spoken = (route) =>
     .join(", ");
 // 301: what's left for the player about to throw, and a checkout if one exists.
 function standing(left, darts = 3) {
-  const route = checkout(left, darts);
+  const route = checkout(left, darts, doubleOut(match));
   return left + " left." + (route ? " Checkout: " + spoken(route) + "." : "");
 }
 // The last dart's outcome in 301: "bust", "out" or "".
@@ -428,11 +437,20 @@ const lobbyDarts = [
 ];
 
 function lobbyParts() {
-  const g = games[game],
-    old = best === null ? saves[game].best : null;
+  const g = games[game];
+  // Until this build sets a record, the lobby shows the newest older one as that:
+  // 301's double-out record with the flick, then either game's old throw's.
+  const [label, shown] =
+    best !== null
+      ? [g.bestLabel, best]
+      : is301() && saves.flick[301] !== null
+        ? [g.doubleLabel, saves.flick[301]]
+        : saves[game].best !== null
+          ? [g.oldLabel, saves[game].best]
+          : [g.bestLabel, null];
   const modeButton = (mode, title) => {
     const s = match?.mode === mode && !status(match).complete && status(match);
-    const left = s && is301() ? " · " + byName(s.totals.length).map((i) => s.totals[i]).join("–") + (mode === "solo" ? " left" : "") : "";
+    const left = s && is301() ? " · " + byName(s.totals.length).map((i) => s.totals[i]).join("–") + (mode === "solo" ? " left" : "") + (doubleOut(match) ? " · double out" : "") : "";
     return `<button class="mode ${mode}" data-mode="${mode}">
       <span class="mode-mark">${icon(mode)}</span>
       <span class="mode-copy"><strong>${s ? "Resume " + title : title}</strong>
@@ -442,8 +460,7 @@ function lobbyParts() {
   const pick = (id, name) =>
     `<button data-game="${id}" aria-pressed="${game === id}">${name}</button>`;
   return {
-    // Until the flick sets one, the lobby shows the old throw's record as that.
-    plate: `<div class="plate best-plate"><span class="plate-label">${old === null ? g.bestLabel : g.oldLabel}</span><b class="plate-score">${bestText(old ?? best)}</b></div>`,
+    plate: `<div class="plate best-plate"><span class="plate-label">${label}</span><b class="plate-score">${bestText(shown)}</b></div>`,
     panel: `<section class="lobby" aria-labelledby="lobby-title">
        <h1 id="lobby-title" class="sr">Dartshift · ${g.name}</h1>
        <div class="games" role="group" aria-label="Game">${pick("rush", "Nine Dart Rush")}${pick("301", "301")}</div>
@@ -502,7 +519,9 @@ function sheet(title, body, bind) {
 function help() {
   sheet(
     "How to play",
-    '<ol class="steps"><li><strong>Pick up the dart.</strong><small>Put your finger on the dart beneath the board.</small></li><li><strong>Flick it up.</strong><small>The faster the flick, the higher the dart lands. Lean the stroke left or right to aim. Start with a medium flick at the bull.</small></li><li><strong>Keep it clean.</strong><small>Swipe straight and let go while your finger is still moving. A curved, slowing or paused stroke scatters the dart.</small></li></ol><p class="body-copy">The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50.</p><p class="body-copy"><strong>Nine Dart Rush.</strong> Three darts per visit, three visits each. Highest total wins.</p><p class="body-copy"><strong>301.</strong> Count down from 301 to exactly zero. The last dart must be a double or the bull. Going below zero, leaving 1 or reaching zero any other way is a bust: the visit ends and your score goes back. Empty dart slots suggest a checkout. Ten rounds each; if nobody finishes, the lowest score wins.</p><button class="primary full" id="okay">Got it</button>',
+    '<ol class="steps"><li><strong>Pick up the dart.</strong><small>Put your finger on the dart beneath the board.</small></li><li><strong>Flick it up.</strong><small>The faster the flick, the higher the dart lands. Lean the stroke left or right to aim. Start with a medium flick at the bull.</small></li><li><strong>Keep it clean.</strong><small>Swipe straight and let go while your finger is still moving. A curved, slowing or paused stroke scatters the dart.</small></li></ol><p class="body-copy">The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50.</p><p class="body-copy"><strong>Nine Dart Rush.</strong> Three darts per visit, three visits each. Highest total wins.</p><p class="body-copy"><strong>301.</strong> Count down from 301. The first to reach exactly zero wins, with any dart: a single, double, treble or bull. Going below zero is a bust: the visit ends and your score goes back. Empty dart slots suggest a checkout. With fewer than ' +
+      x01.highlightBelow +
+      ' left, the board outlines the number that finishes; its darkened treble and double would bust. Ten rounds each; if nobody finishes, the lowest score wins. A match saved before this rule finishes under double out, as it began.</p><button class="primary full" id="okay">Got it</button>',
     () => {
       $("#okay").onclick = () => $("#modal").close();
       $("#sheet-title").onclick = probeTap;
@@ -536,6 +555,8 @@ try {
   /* No readout. */
 }
 function start(mode, first = 0) {
+  // A new 301 match replaces a double-out one still in its old slot.
+  if (slot(game) === saves[301]) Object.assign(saves[301], { match: null, acknowledged: -1 });
   match = freshMatch(mode, game, first);
   acknowledged = -1;
   freshBest = false;
@@ -543,7 +564,7 @@ function start(mode, first = 0) {
   save();
   play();
   say(
-    (is301() ? "301, double out. " : "") +
+    (is301() ? "301, first to zero. " : "") +
       (match.first ? "Player 2 throws first. " : "") +
       "Round one. Touch the dart and flick it up to throw. The faster the flick, the higher it lands. Keep the stroke straight.",
   );
@@ -576,7 +597,7 @@ function selectMode(mode) {
 // In 301 the big number is what's left, and the empty slots show a checkout.
 function plate(s, shown, round, visit, closed, bust = null) {
   const duel = match.mode === "duel";
-  const route = is301() && !closed ? checkout(s.totals[shown], 3 - visit.length) : null;
+  const route = is301() && !closed ? checkout(s.totals[shown], 3 - visit.length, doubleOut(match)) : null;
   const slots = [0, 1, 2]
     .map((i) => {
       const h = visit[i];
@@ -593,7 +614,7 @@ function plate(s, shown, round, visit, closed, bust = null) {
     : "Dart " + s.dart + " of 3" + (route ? ". Checkout " + spoken(route) : "");
   return `<div class="plate${duel ? " " + seatClass(shown) : ""}">
     <span class="plate-label who">${duel ? playerName(shown) : is301() ? "Remaining" : "Score"}</span>
-    <span class="plate-label side">${duel ? playerName(1 - shown) + " · " + s.totals[1 - shown] : "Best " + bestText()}</span>
+    <span class="plate-label side">${duel ? playerName(1 - shown) + " · " + s.totals[1 - shown] : doubleOut(match) ? "Double out" : "Best " + bestText()}</span>
     <b class="plate-score">${s.totals[shown]}</b>
     <span class="visit"><span class="plate-label">Round ${round} / ${games[game].rounds}</span>
       <span class="slots" role="img" aria-label="${where}">${slots}</span></span>
@@ -625,13 +646,19 @@ function embed(hit, earlier, impactClass) {
     .insertAdjacentHTML("beforebegin", landed(hit, impactClass));
   return objects.parentElement;
 }
-// The frame after: the callout joins the board that holds the new dart.
-function landing(hits, impactClass, note) {
+// The frame after: the callout joins the board that holds the new dart, and the
+// finishing highlight follows the scoreboard (only if it changed).
+function landing(hits, impactClass, note, target = null) {
   const wrap = impactClass && embedded?.isConnected ? embedded : null;
   embedded = null;
   if (!wrap) return null;
   wrap.querySelector(".callout")?.remove();
   wrap.insertAdjacentHTML("beforeend", callout(hits.at(-1), note));
+  const mark = wrap.querySelector(".finish");
+  if (mark.dataset.bed !== (target ?? "")) {
+    mark.dataset.bed = target ?? "";
+    mark.innerHTML = finishMark(target);
+  }
   return wrap;
 }
 // What a darts caller would shout for a three-dart visit.
@@ -683,10 +710,12 @@ function play(impactClass = "", leaving = false) {
       <button class="primary big" id="next">${duel ? "Pass to " + playerName(s.player) : "Start round " + s.round}${icon("arrow")}</button>
     </section>`;
   }
-  const keep = landing(onBoard, impactClass, note);
+  // The finishing bed on the board: the first slot of the plate's route.
+  const target = finishTarget(match, acknowledged);
+  const keep = landing(onBoard, impactClass, note, target);
   const world = `<div class="field gameplay">
        ${plate(s, shown, round, visit, between, between && last.bust)}
-       <div class="board-wrap">${keep ? "" : board(onBoard, impactClass) + (impactClass && visit.length ? callout(visit.at(-1), note) : "")}</div>
+       <div class="board-wrap">${keep ? "" : board(onBoard, impactClass, target) + (impactClass && visit.length ? callout(visit.at(-1), note) : "")}</div>
        ${between ? "" : throwControl}
      </div>`;
   if (between) {
@@ -864,7 +893,9 @@ function finish(impactClass = "") {
       ? duel
         ? "Game shot · " + hit.label
         : carried()
-          ? "Begun with the old throw · no record"
+          ? doubleOut(match)
+            ? "Begun as double out · no record"
+            : "Begun with the old throw · no record"
           : freshBest
             ? "New personal best"
             : "Personal best · " + bestText()
@@ -890,7 +921,7 @@ function finish(impactClass = "") {
   const world = `<div class="field">${plate(s, end.player, end.round, visit, true, end.bust)}
        <div class="board-wrap">${keep ? "" : board(visit, impactClass) + (impactClass ? callout(last, note) : "")}</div></div>`;
   const results = `<section class="card results${freshBest && !duel ? " record" : ""}" aria-labelledby="result-title">
-      <p class="eyelabel">${is301() ? "301 · " : ""}${duel ? "Local duel" : "Solo run"}</p>
+      <p class="eyelabel">${is301() ? (doubleOut(match) ? "301 · double out · " : "301 · ") : ""}${duel ? "Local duel" : "Solo run"}</p>
       <h1 id="result-title">${title}</h1>
       <div class="result-score">${score}</div>
       <p class="note">${line}</p>

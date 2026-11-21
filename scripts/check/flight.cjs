@@ -2,6 +2,8 @@
 // node scripts/check/flight.cjs <chromium|webkit> <built dir> [label]
 // env: VW VH DPR THROWS STROKES=ms,ms,ms CDP=<rate> QUOTA=<% of one core via cgroup v1, root> CSS=<override> MUTED=1 DETAIL=1 OUT=<jsonl>
 //      TRACE=<file> (chromium) REDUCED=1
+//      SEED=<left>: throw in a 301 solo resumed on `left` (first to zero in dartshift.301.v2; with LEGACY=1,
+//      a double-out save in 301.v1, which a build from before first to zero also plays, without a highlight)
 const pw = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 const http = require("http"), fs = require("fs"), path = require("path");
 const { execSync } = require("child_process");
@@ -103,6 +105,19 @@ const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length % 2
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
   await page.goto(base);
+  if (env.SEED) {
+    await page.evaluate(async ([left, legacy]) => {
+      const g = await import("./src/game.js");
+      const pt = (l) => { if (l === "Miss") return { x: 0, y: -190 }; const r = { T: 103, D: 166 }[l[0]] ?? 130, d = (g.sectors.indexOf(+l.replace(/^[TD]/, "")) * 18 * Math.PI) / 180; return { x: Math.sin(d) * r, y: -Math.cos(d) * r }; };
+      const route = g.checkout(121 - left, 3, legacy);
+      let m = legacy ? { game: "301", mode: "solo", hits: [] } : g.freshMatch("solo", "301");
+      for (const l of ["T20", "T20", "T20", ...route, ...["Miss", "Miss", "Miss"].slice(route.length)]) m = g.advance(m, pt(l));
+      const save = { match: m, best: null, acknowledged: m.hits.length };
+      localStorage.setItem("dartshift.301.v1", JSON.stringify({ ...(legacy ? save : { match: null, best: null, acknowledged: -1 }), lobby: "301" }));
+      if (!legacy) localStorage.setItem("dartshift.301.v2", JSON.stringify(save));
+    }, [+env.SEED, !!env.LEGACY]);
+    await page.reload();
+  }
   await page.click("[data-mode=solo]");
   const settled = () => page.waitForFunction(() => document.getAnimations().filter((a) => a.playState === "running").length === 0 && !document.querySelector(".field[aria-busy]"), null, { timeout: 15000 });
   await settled();
@@ -138,7 +153,7 @@ const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length % 2
   }
   if (env.TRACE && engine === "chromium") await browser.stopTracing();
   unthrottle();
-  const score = await page.evaluate(() => JSON.parse(localStorage.getItem("dartshift.save.v1"))?.match?.hits?.length);
+  const score = await page.evaluate(() => ["dartshift.save.v1", "dartshift.301.v1", "dartshift.301.v2"].map((k) => JSON.parse(localStorage.getItem(k))?.match?.hits?.length ?? "-").join("/"));
   await browser.close();
   server.close();
   const ok = results.filter((r) => !r.error);
