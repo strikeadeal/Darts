@@ -143,3 +143,27 @@ test("mixed duel assigns both halves of all three rounds to the right player", (
   }
   assert.deepEqual(status(m).totals, [330, 99]);
 });
+
+test("a duel rematch can name Player 2 first without changing the scoring", () => {
+  assert.equal(freshMatch("duel", undefined, 1).first, 1);
+  assert.equal(freshMatch("duel", "301", 1).first, 1);
+  assert.equal("first" in freshMatch("duel"), false);
+  assert.equal("first" in freshMatch("solo", undefined, 1), false);
+  let a = freshMatch("duel"), b = freshMatch("duel", undefined, 1);
+  for (let i = 0; i < 18; i++) {
+    const p = { x: (i % 5) * 20 - 40, y: -100 + i * 7 };
+    a = advance(a, p);
+    b = advance(b, p);
+    const [sa, sb] = [status(a), status(b)];
+    assert.deepEqual([sb.totals, sb.player, sb.round, sb.complete], [sa.totals, sa.player, sa.round, sa.complete]);
+  }
+  assert.equal(b.first, 1); // kept through advance
+  assert.equal(decodeMatch(JSON.parse(JSON.stringify(b))).first, 1);
+  // Anything else is dropped, not rejected.
+  for (const first of [0, 2, "1", null]) {
+    const m = decodeMatch({ mode: "duel", hits: [], first });
+    assert.ok(m);
+    assert.equal("first" in m, false);
+  }
+  assert.equal("first" in decodeMatch({ mode: "solo", hits: [], first: 1 }), false);
+});

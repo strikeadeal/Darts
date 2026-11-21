@@ -200,7 +200,7 @@ p {
 .eyelabel,
 .plate-label {
   font: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1.5px;
   color: var(--muted);
@@ -539,6 +539,15 @@ p {
 .plate .side {
   text-align: right;
 }
+/* Names stay on one line; a narrow duel plate gives up letter-spacing first. */
+.plate :is(.who, .side) {
+  white-space: nowrap;
+}
+@media (max-width: 359px) {
+  .plate .plate-label {
+    letter-spacing: 0.5px;
+  }
+}
 .plate .who {
   color: var(--accent);
 }
@@ -556,7 +565,7 @@ p {
 }
 .visit .plate-label {
   color: var(--cream);
-  font-size: 9px;
+  font-size: 11px;
 }
 .slots {
   display: flex;
@@ -1141,10 +1150,32 @@ p {
   background: #23251ff2;
   box-shadow: 0 8px 22px #000b;
 }
-#apply {
+.toast button {
   text-decoration: underline;
   color: var(--cream);
   min-height: 44px;
+  min-width: 44px;
+  padding-inline: 8px;
+}
+#later {
+  color: var(--muted);
+}
+.toast.install {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  width: min(420px, calc(100vw - 32px));
+  line-height: 1.35;
+}
+.toast.install p {
+  margin: 0;
+}
+/* The last throw's tip, carried onto the card that ended the visit. */
+.handoff .tip {
+  margin: 4px 0 10px;
+  color: #ffc36a;
+  font-size: 15px;
 }
 
 /* ───────────────────────── Sheets ───────────────────────── */
@@ -1229,7 +1260,8 @@ dialog::backdrop {
     font-size: 32px;
   }
   .throw-control small {
-    display: none;
+    font-size: 12px;
+    margin-top: 2px;
   }
   .tagline {
     display: none;
@@ -1280,22 +1312,30 @@ dialog::backdrop {
   .best-plate {
     justify-items: start;
   }
+  /* The dart on the left, the prompt and its second line stacked beside it. */
   .throw-control {
-    grid-auto-flow: column;
+    grid-template: 1fr auto auto / auto auto;
+    justify-items: start;
     align-items: end;
-    gap: 12px;
+    column-gap: 12px;
     left: calc(var(--cx) - 30px);
     width: auto;
     padding-bottom: 2px;
   }
   .dart-grip {
+    grid-area: 1 / 1 / 4 / 2;
     margin: 0;
   }
   .throw-control b {
+    grid-area: 2 / 2;
     font-size: 16px;
     white-space: nowrap;
   }
-  .throw-control small,
+  .throw-control small {
+    grid-area: 3 / 2;
+    font-size: 12px;
+    white-space: nowrap;
+  }
   .tagline {
     display: none;
   }

@@ -9,10 +9,13 @@ import {
   readSaves,
   writeSaves,
   saveKeys,
+  learnDarts,
+  mergeRecords,
 } from "./game.js";
+import { coach } from "./coach.js";
 import { icon, board, landed, readyDart } from "./art.js";
 import { bindThrows, bindTurnButton, flyDart } from "./input.js";
-import { boardPosition, tune } from "./throw.js";
+import { boardPosition } from "./throw.js";
 import { unlock, impact, whoosh, fanfare } from "./sound.js";
 import { fitScreen } from "./viewport.js";
 
@@ -33,7 +36,19 @@ const read = (key) => {
 // readSaves). `game` is the one on screen; match, best and acknowledged are its
 // copies, put back by use() and save(). `best` is the record set with the flick;
 // saves[game].best is the old throw's, kept as it was.
-const saves = readSaves(read(saveKeys.rush), read(saveKeys.x01), read(saveKeys.flick));
+const keys = Object.values(saveKeys);
+const load = () => readSaves(...keys.map(read));
+// The raw saved strings as of this tab's last read or write. Anything else means
+// another tab (or window) wrote since, and its newer saves win (see refresh).
+const snapshot = () => {
+  try {
+    return keys.map((k) => localStorage.getItem(k)).join("\n");
+  } catch {
+    return "";
+  }
+};
+let seen = snapshot();
+const saves = load();
 let game = saves.lobby;
 let { match, acknowledged } = saves[game];
 let best = saves.flick[game];
@@ -57,11 +72,31 @@ function save() {
   stash();
   saves.muted = muted;
   try {
+    // Never lower a record another tab set since this one last looked.
+    if (snapshot() !== seen) mergeRecords(load(), saves);
+    best = saves.flick[game];
     for (const [key, value] of Object.entries(writeSaves(saves)))
       localStorage.setItem(key, JSON.stringify(value));
+    seen = snapshot();
   } catch {
     $("#storage-note").hidden = false;
   }
+}
+// Another tab wrote newer saves: adopt them before this tab does anything, and
+// redraw what is on screen. Keeps the game on screen; results stay as they are.
+function refresh() {
+  const now = snapshot();
+  if (now === seen) return false;
+  seen = now;
+  Object.assign(saves, load(), { lobby: game });
+  ({ match, acknowledged } = saves[game]);
+  best = saves.flick[game];
+  muted = saves.muted;
+  audioButton();
+  const shot = scene.dataset.shot;
+  if (shot === "oche" || shot === "step") match && !status(match).complete ? play() : home();
+  else if (shot !== "final") home();
+  return true;
 }
 function say(text) {
   $("#announce").textContent = text;
@@ -97,6 +132,78 @@ audioButton();
 function shoot(shot) {
   if (scene.dataset.shot === "intro") getComputedStyle(stage).transform; // start from the intro pose
   scene.dataset.shot = shot;
+  toasts();
+}
+
+// Notices never cover the board while a dart can be thrown (the oche shot): an
+// update waits for the lobby, a handoff or the results, and the install card
+// shows only in the lobby. One at a time, the update first.
+// One line on what this release changed, shown once after Update game. Edit per release.
+const releaseNote = "Tips while you learn, safer records, and duels now take turns to start.";
+const updatedKey = "dartshift.updated"; // session-only, set by Update game
+const installKey = "dartshift.install.v1"; // set once the install card is dismissed
+const notices = { update: false, later: false, install: false, updated: "" };
+let noteTimer = 0;
+function toasts() {
+  const shot = scene.dataset.shot,
+    calm = shot !== "oche";
+  const update = notices.update && !notices.later && calm,
+    updated = !!notices.updated && calm && !update,
+    install = notices.install && shot === "wide" && !update && !updated;
+  $("#update").hidden = !update;
+  $("#updated").hidden = !updated;
+  $("#install").hidden = !install;
+  if (updated && !noteTimer)
+    noteTimer = setTimeout(() => {
+      notices.updated = "";
+      toasts();
+    }, 6000);
+}
+$("#later").onclick = () => {
+  notices.later = true;
+  toasts();
+};
+// The installed app and a Safari tab keep separate records and only the app
+// plays offline full screen. iOS has no install prompt, so an iPhone Safari tab
+// says how, once, after the first finished match.
+const iPhoneTab = navigator.standalone === false && /iPhone|iPod/.test(navigator.userAgent);
+let finishedHere = false;
+function installCheck() {
+  if (!iPhoneTab) return;
+  let dismissed = false;
+  try {
+    dismissed = localStorage.getItem(installKey) !== null;
+  } catch {
+    /* Shown once per session instead. */
+  }
+  const played =
+    finishedHere ||
+    [saves.flick.rush, saves.flick[301], saves.rush.best, saves[301].best].some((n) => n !== null) ||
+    [saves.rush.match, saves[301].match].some((m) => m && status(m).complete);
+  notices.install = !dismissed && !notices.installSeen && played;
+  toasts();
+}
+$("#install-ok").onclick = () => {
+  notices.install = false;
+  notices.installSeen = true;
+  try {
+    localStorage.setItem(installKey, "1");
+  } catch {
+    /* Hidden for this session. */
+  }
+  toasts();
+};
+// Ask once per session, after a finished match, for storage the system won't
+// clear on its own. WebKit decides by heuristics; a refusal changes nothing.
+let persistAsked = false;
+function keepStorage() {
+  if (persistAsked) return;
+  persistAsked = true;
+  try {
+    navigator.storage?.persist?.().catch(() => {});
+  } catch {
+    /* Not supported. */
+  }
 }
 // Any touch or key finishes running transitions: nobody waits on the camera,
 // and a stroke always begins on a settled layout. A dart in flight is left to land.
@@ -105,6 +212,12 @@ function shoot(shot) {
 // touch on the moving dart still picks it up (see onDart).
 let skip = null;
 function settle(event) {
+  // Saves changed in another tab: this touch or key only brings them in.
+  if (refresh()) {
+    event.stopPropagation();
+    event.preventDefault();
+    return;
+  }
   if (later) {
     const { run } = later;
     later.stop();
@@ -250,7 +363,13 @@ function render(shot, world, overlay = "", keep = null) {
   refocus = !!lost && !next;
 }
 
-const playerName = (i) => "Player " + (i + 1);
+// A duel rematch alternates who throws first by swapping names and colours
+// (match.first, src/game.js freshMatch); index 0 always throws first.
+const seat = (i) => (i + (match?.first || 0)) % 2;
+const playerName = (i) => "Player " + (seat(i) + 1);
+const seatClass = (i) => "p" + (seat(i) + 1);
+// Indices in name order, so Player 1 is always listed first.
+const byName = (n) => (n === 2 && match?.first ? [1, 0] : [...Array(n).keys()]);
 const games = {
   rush: {
     name: "Nine Dart Rush",
@@ -313,7 +432,7 @@ function lobbyParts() {
     old = best === null ? saves[game].best : null;
   const modeButton = (mode, title) => {
     const s = match?.mode === mode && !status(match).complete && status(match);
-    const left = s && is301() ? " · " + s.totals.join("–") + (mode === "solo" ? " left" : "") : "";
+    const left = s && is301() ? " · " + byName(s.totals.length).map((i) => s.totals[i]).join("–") + (mode === "solo" ? " left" : "") : "";
     return `<button class="mode ${mode}" data-mode="${mode}">
       <span class="mode-mark">${icon(mode)}</span>
       <span class="mode-copy"><strong>${s ? "Resume " + title : title}</strong>
@@ -337,6 +456,7 @@ function lobbyParts() {
   };
 }
 function home() {
+  tip = "";
   const { plate, panel: lobby } = lobbyParts();
   render("wide", plate + `<div class="board-wrap">${board(lobbyDarts)}</div>`, lobby);
   bindLobby();
@@ -415,8 +535,8 @@ try {
 } catch {
   /* No readout. */
 }
-function start(mode) {
-  match = freshMatch(mode, game);
+function start(mode, first = 0) {
+  match = freshMatch(mode, game, first);
   acknowledged = -1;
   freshBest = false;
   saves.flick.carried = saves.flick.carried.filter((g) => g !== game);
@@ -424,6 +544,7 @@ function start(mode) {
   play();
   say(
     (is301() ? "301, double out. " : "") +
+      (match.first ? "Player 2 throws first. " : "") +
       "Round one. Touch the dart and flick it up to throw. The faster the flick, the higher it lands. Keep the stroke straight.",
   );
 }
@@ -470,7 +591,7 @@ function plate(s, shown, round, visit, closed, bust = null) {
       ? "Bust"
       : "Visit complete"
     : "Dart " + s.dart + " of 3" + (route ? ". Checkout " + spoken(route) : "");
-  return `<div class="plate${duel ? " p" + (shown + 1) : ""}">
+  return `<div class="plate${duel ? " " + seatClass(shown) : ""}">
     <span class="plate-label who">${duel ? playerName(shown) : is301() ? "Remaining" : "Score"}</span>
     <span class="plate-label side">${duel ? playerName(1 - shown) + " · " + s.totals[1 - shown] : "Best " + bestText()}</span>
     <b class="plate-score">${s.totals[shown]}</b>
@@ -554,10 +675,11 @@ function play(impactClass = "", leaving = false) {
     const mine = is301()
       ? `<span>Left · ${s.totals[0]}</span><span>Darts · ${n}</span>`
       : `<span>Total · ${s.totals[0]}</span><span>Best · ${bestText()}</span>`;
-    card = `<section class="card handoff${tier}${duel ? " p" + (s.player + 1) : ""}" aria-labelledby="visit-title">
+    card = `<section class="card handoff${tier}${duel ? " " + seatClass(s.player) : ""}" aria-labelledby="visit-title">
       <p class="eyelabel">${duel ? playerName(shown) + " · " : ""}Visit complete</p>
       <h2 id="visit-title">${heading}</h2>
-      <p class="standings">${duel ? `<span class="p1">Player 1 · ${s.totals[0]}</span><span class="p2">Player 2 · ${s.totals[1]}</span>` : mine}</p>
+      <p class="standings">${duel ? byName(2).map((i) => `<span class="${seatClass(i)}">${playerName(i)} · ${s.totals[i]}</span>`).join("") : mine}</p>
+      ${tip ? `<p class="tip">${tip}</p>` : ""}
       <button class="primary big" id="next">${duel ? "Pass to " + playerName(s.player) : "Start round " + s.round}${icon("arrow")}</button>
     </section>`;
   }
@@ -618,20 +740,9 @@ function play(impactClass = "", leaving = false) {
     if (cancelAim === reset) reset(true);
   });
 }
-// After a throw that went astray, the next dart's prompt says why: the stroke's
-// biggest fault if it cost 6 mm or more, else which way a clean flick left the board.
-function coach(stroke, { x, y }) {
-  const [fault, mm] = Object.entries(stroke?.faults || {}).sort((a, b) => b[1] - a[1])[0] || [];
-  if (mm >= 6)
-    return {
-      bend: "Keep the stroke straight",
-      slowdown: "Let go while still flicking",
-      speed: stroke.speed > tune.input.fast ? "Too hard · flick softer" : "Too soft · flick harder",
-    }[fault];
-  if (!stroke || Math.hypot(x, y) <= 170) return "";
-  if (Math.abs(x) > Math.abs(y)) return "Too wide · straighten your line";
-  return y < 0 ? "Too high · flick softer" : "Too low · flick harder";
-}
+// After a throw that went astray, the next dart's prompt says why (src/coach.js).
+// The tip also goes on the handoff card when the throw ended the visit.
+let tip = "";
 function land(point, held, geo, stroke) {
   const hit = scoreAt(point.x, point.y);
   match = advance(match, point);
@@ -639,7 +750,9 @@ function land(point, held, geo, stroke) {
     v = s.visits.at(-1),
     note = noteOf(v),
     darts = match.hits.length,
-    tip = coach(stroke, point);
+    learning = !!stroke && saves.learn < learnDarts;
+  tip = coach(stroke, point, learning);
+  if (learning) saves.learn++;
   if (s.complete && match.mode === "solo" && !carried()) {
     if (!is301()) {
       freshBest = best === null || s.totals[0] > best;
@@ -675,7 +788,7 @@ function land(point, held, geo, stroke) {
       a.currentTime = 0;
     }
     say(
-      !is301()
+      (!is301()
         ? hit.label + ", " + hit.points + " points." + (s.complete ? " Match complete." : "")
         : note === "bust"
           ? `${hit.label}. Bust, ${bustReasons[v.bust].toLowerCase()}. Back to ${v.start}.`
@@ -685,7 +798,7 @@ function land(point, held, geo, stroke) {
               : v.closed
                 ? s.totals[v.player] + " left."
                 : standing(s.totals[v.player], 3 - v.hits.length)) +
-            (s.complete ? " " + verdict(s) + "." : "") +
+            (s.complete ? " " + verdict(s) + "." : "")) +
         (tip && !s.complete ? " " + tip + "." : ""),
     );
     defer(() => {
@@ -722,8 +835,8 @@ function finish(impactClass = "") {
       : "Run complete";
     const rounds = [0, 1, 2]
       .map((r) => {
-        const cells = totals
-          .map((_, p) => {
+        const cells = byName(totals.length)
+          .map((p) => {
             const offset = (r * totals.length + p) * 3;
             return "<td>" + visitTotal(match.hits.slice(offset, offset + 3)) + "</td>";
           })
@@ -731,7 +844,7 @@ function finish(impactClass = "") {
         return "<tr><td>Round " + (r + 1) + "</td>" + cells + "</tr>";
       })
       .join("");
-    score = `${totals.map((t, i) => `<span class="${duel ? "p" + (i + 1) : ""}">${t}</span>`).join("<i>–</i>")}<small>PTS</small>`;
+    score = `${byName(totals.length).map((i) => `<span class="${duel ? seatClass(i) : ""}">${totals[i]}</span>`).join("<i>–</i>")}<small>PTS</small>`;
     line = duel
       ? "Final dart · " + hit.label + " (+" + hit.points + ")"
       : carried()
@@ -739,14 +852,14 @@ function finish(impactClass = "") {
         : freshBest
           ? "New personal best"
           : "Personal best · " + bestText();
-    table = `<thead><tr><th>Visit</th>${totals.map((_, i) => "<th>" + (duel ? playerName(i) : "Points") + "</th>").join("")}</tr></thead><tbody>${rounds}</tbody>`;
+    table = `<thead><tr><th>Visit</th>${byName(totals.length).map((i) => "<th>" + (duel ? playerName(i) : "Points") + "</th>").join("")}</tr></thead><tbody>${rounds}</tbody>`;
   } else {
     title = verdict(s);
     const darts = match.hits.length;
     score =
       !duel && s.out
         ? `<span>${darts}</span><small>DARTS</small>`
-        : `${totals.map((t, i) => `<span class="${duel ? "p" + (i + 1) : ""}">${t}</span>`).join("<i>–</i>")}<small>LEFT</small>`;
+        : `${byName(totals.length).map((i) => `<span class="${duel ? seatClass(i) : ""}">${totals[i]}</span>`).join("<i>–</i>")}<small>LEFT</small>`;
     line = s.out
       ? duel
         ? "Game shot · " + hit.label
@@ -769,8 +882,8 @@ function finish(impactClass = "") {
       };
     });
     const row = (name, key) =>
-      "<tr><td>" + name + "</td>" + stats.map((x) => "<td>" + x[key] + "</td>").join("") + "</tr>";
-    const head = duel ? `<thead><tr><th></th>${totals.map((_, i) => "<th>" + playerName(i) + "</th>").join("")}</tr></thead>` : "";
+      "<tr><td>" + name + "</td>" + byName(totals.length).map((p) => "<td>" + stats[p][key] + "</td>").join("") + "</tr>";
+    const head = duel ? `<thead><tr><th></th>${byName(2).map((i) => "<th>" + playerName(i) + "</th>").join("")}</tr></thead>` : "";
     table = `${head}<tbody>${row("Darts", "darts")}${row("3-dart average", "average")}${row("Best visit", "top")}</tbody>`;
   }
   const keep = landing(visit, impactClass, note);
@@ -785,10 +898,14 @@ function finish(impactClass = "") {
       <div class="actions"><button class="primary" id="again">Play again ${icon("arrow")}</button><button class="secondary" id="lobby">Modes</button></div>
     </section>`;
   const show = () => {
+    finishedHere = true;
+    keepStorage();
     render("final", world, results, keep);
-    bindTurnButton($("#again"), () => start(match.mode));
+    // A duel rematch hands the first throw to the other player.
+    bindTurnButton($("#again"), () => start(match.mode, duel ? 1 - (match.first || 0) : 0));
     bindTurnButton($("#lobby"), home);
     if (impactClass) moment("win");
+    installCheck();
   };
   if (impactClass && !muted) fanfare();
   if (keep) {
@@ -813,8 +930,16 @@ fitScreen();
 for (const type of ["resize", "orientationchange", "pageshow"])
   addEventListener(type, refit);
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) refit();
+  if (!document.hidden) {
+    refit();
+    refresh();
+  }
 });
+// Another tab's write, or a return from the back/forward cache: newer saves win.
+addEventListener("storage", (event) => {
+  if (!event.key || keys.includes(event.key)) refresh();
+});
+addEventListener("pageshow", () => refresh());
 
 // An update reload returns straight to the match it interrupted.
 let resuming = null;
@@ -824,6 +949,14 @@ try {
 } catch {
   /* Lobby. */
 }
+try {
+  if (sessionStorage.getItem(updatedKey)) notices.updated = "Updated · " + releaseNote;
+  sessionStorage.removeItem(updatedKey);
+} catch {
+  /* No note. */
+}
+$("#updated").textContent = notices.updated;
+installCheck();
 if (resuming && resuming !== game) use(resuming);
 if (resuming && match && !status(match).complete) play();
 else home();
@@ -839,11 +972,14 @@ if ("serviceWorker" in navigator) {
     .then((reg) => {
       function offer() {
         if (!reg.waiting || !navigator.serviceWorker.controller) return;
-        $("#update").hidden = false;
+        notices.update = true;
+        notices.later = false;
+        toasts();
         $("#apply").onclick = () => {
           cancelAim();
           save();
           try {
+            sessionStorage.setItem(updatedKey, "1");
             if (["oche", "step"].includes(scene.dataset.shot))
               sessionStorage.setItem(resumeKey, is301() ? "301" : "1");
           } catch {
