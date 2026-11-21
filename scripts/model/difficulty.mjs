@@ -1,6 +1,4 @@
-// Historical synthetic difficulty experiment. The profiles and repeated-position
-// lift below are hypotheses. Use recorded.mjs for measured gestures and paired
-// replays before drawing conclusions about players or changing the tuning.
+// A model of human thumb flicks, used to measure how hard the throw is.
 // Not part of the build and never imported by the game. See DECISIONS.md, "The flick".
 //
 //   node scripts/model/difficulty.mjs            before (legacy-throw.mjs) and after (src/throw.js)

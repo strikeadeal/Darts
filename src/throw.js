@@ -127,17 +127,11 @@ function aimed(line, length, speed) {
   };
 }
 
-// Clean board point for an already accepted stroke. Steering can carry its line
-// beyond the pickup slope; validity is decided once, on the actual displacement.
-export function cleanLanding(line, length, speed) {
-  const p = aimed(line, length, speed);
-  return { x: limit(p.x), y: limit(p.y) };
-}
-
 // A clean, straight stroke of (dx, dy) px released at `speed`: the calibration.
 export function swipeLanding(dx, dy, width, speed = tune.input.cruise) {
   if (!upward(dx, dy, width)) return null;
-  return cleanLanding(Math.atan2(dx, -dy), Math.hypot(dx, dy) / width, speed);
+  const p = aimed(Math.atan2(dx, -dy), Math.hypot(dx, dy) / width, speed);
+  return { x: limit(p.x), y: limit(p.y) };
 }
 
 // The whole stroke is kept, for its shape as well as its release.
