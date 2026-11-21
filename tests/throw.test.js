@@ -252,6 +252,7 @@ test("seeded scatter: the same stroke always lands the same, a clean one whereve
 test("flicks still require a deliberate upward stroke and extreme throws remain misses", () => {
   for (const end of [
     [1, 0, 0.01 - tune.input.minimumRise], // just short of the minimum rise
+    [1, 0, 0], // no upward movement at all
     [3, 1, -0.34],
     [100, 0, 0.5],
     [100, 0, 0],
@@ -319,4 +320,19 @@ test("old saves replay and score exactly as they were thrown", () => {
   // 180, then T20 T20 leaves 1 (bust, back to 121), then T20 and single 20.
   assert.deepEqual(status(x01).totals, [41]);
   assert.deepEqual(status(x01).visits.map((v) => v.bust), [null, "one", null]);
+});
+
+test("with no minimum swipe, any upward movement throws a valid dart and a tap still doesn't", () => {
+  // Taps that pick the dart up and put it down: no rise, sideways jitter, or a
+  // rise within `stillPx` (a finger rolling on the glass).
+  const roll = (tune.input.stillPx - 0.5) / W;
+  for (const path of [[[0, 0, 0], [80, 0, 0]], [[0, 0, 0], [80, 0.002, 0]], [[0, 0, 0], [40, 0, 0.003], [80, 0, 0.003]], [[0, 0, 0], [80, 0, -roll]]])
+    assert.equal(throwPath(path), null);
+  // The smallest upward nudges throw, and every number saved is finite.
+  for (const path of [[[0, 0, 0], [80, 0, -3 / W]], [[0, 0, 0], [16, 0, -0.01], [33, 0.001, -0.02]], [[0, 0, 0], [200, 0, -0.1]]]) {
+    const hit = throwPath(path);
+    assert.ok(hit, JSON.stringify(path));
+    for (const key of ["x", "y", "pace", "line"]) assert.ok(Number.isFinite(hit[key]), `${key} ${JSON.stringify(hit)}`);
+    assert.ok(decodeMatch(advance(freshMatch("solo"), hit)));
+  }
 });

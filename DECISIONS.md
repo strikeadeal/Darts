@@ -621,7 +621,7 @@ Everything below is in `tune.input` in `src/throw.js`. Lengths are board widths 
   - **Speed outside 0.6–23 widths/s:** 40 mm per doubling beyond. The board needs about 1.3–18, so this only catches extreme strokes.
 - **The miss.** A stroke misses its release point by exactly the sum of its faults, in a direction drawn from a seed. Within the allowances the miss is zero.
 - **The prompt coaches.** After a throw whose biggest fault cost 6 mm or more, the next dart's prompt says what to fix: "Keep the stroke straight", "Let go while still flicking", "Too hard · flick softer" or "Too soft · flick harder". After a clean throw that left the board, it says which way: "Too high · flick softer", "Too low · flick harder" or "Too wide · straighten your line". Screen readers hear it after the score. It is not shown after a visit's last dart, when the hand-off card is up.
-- **Unchanged.** Validity is the same: upward travel of at least a third of the board width (a quarter since 21 November) and the same slope rule, so short, sideways and downward strokes still cost nothing. The flight takes `pace` (now log speed between `cruise` and `fast`) and `line` exactly as before, so a hard flick still flies flatter and quicker (202–270 ms). The tip still ends on the saved point, and `flyDart`, `entryPose`, `scoreAt`, the grab rule, the room, the layout, the rules of both games, `dartshift.save.v1`, `dartshift.301.v1` and `dartshift.resume` are untouched.
+- **Unchanged.** Validity is the same: upward travel of at least a third of the board width (a quarter, then any upward movement, since 21 November) and the same slope rule, so short, sideways and downward strokes still cost nothing. The flight takes `pace` (now log speed between `cruise` and `fast`) and `line` exactly as before, so a hard flick still flies flatter and quicker (202–270 ms). The tip still ends on the saved point, and `flyDart`, `entryPose`, `scoreAt`, the grab rule, the room, the layout, the rules of both games, `dartshift.save.v1`, `dartshift.301.v1` and `dartshift.resume` are untouched.
 
 ### "Repeatable", redefined
 
@@ -793,6 +793,15 @@ Three changes on request: a taller swipe box, a shorter minimum swipe, and a fir
 - A touch 4 px beyond the old 1.2 target, above or below the dart, picks it up.
 - A touch beside the dart doesn't.
 - A 0.28-width swipe throws; a 0.22-width swipe is refused with "Flick further up to throw".
+
+## No minimum swipe · 21 November 2026
+
+`minimumRise` ¼ → 0, on request: any upward movement throws.
+
+- **Taps still don't throw.** At exactly 0 the validity rule accepted a stroke with no movement at all, and a zero-length stroke gives a `NaN` bend, which would be saved into the match. So a stroke must rise by more than zero, and the stroke as read (after any rest is taken off) must itself rise. A finger that only rolls within `stillPx` (2 px) of where it touched counts as a tap.
+- **The cost: accidental throws.** A finger that rolls upward more than 2 px while picking up the dart now throws it. Such a nudge is very slow, so it lands low or off the board with "Too soft · flick harder". If players report darts lost this way, a minimum of a few pixels (or 0.02–0.05 board widths) would stop it.
+- **The slope rule is unchanged,** so mostly sideways and downward strokes are still refused. The refusal hint is now "Flick up to throw".
+- **Checked in Chromium** at 393×852 and 320×568: a tap is refused, a 0.02-width nudge throws, and a 0.28-width swipe throws. Old saves are unaffected: their hits are replayed, not recomputed.
 
 ## The flick verification · 20 November 2026
 

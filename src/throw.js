@@ -5,7 +5,7 @@
 export const tune = {
   input: {
     // Which strokes throw at all.
-    minimumRise: 1 / 4, // upward travel, board widths
+    minimumRise: 0, // upward travel, board widths: any upward movement throws
     minimumSlope: 0.35, // upward travel per unit of sideways travel
     limit: 201, // board millimetres
     // How the release is read: speed and direction over the last `window` board
@@ -110,6 +110,7 @@ function upward(dx, dy, width) {
   return (
     [dx, dy, width].every(Number.isFinite) &&
     width > 0 &&
+    -dy > 0 && // a tap, or no movement at all, never throws
     -dy >= width * g.minimumRise &&
     -dy >= Math.abs(dx) * g.minimumSlope
   );
@@ -201,6 +202,9 @@ export function readStroke(start, samples, width) {
   const tip = path.length > j + 1 ? j + 1 : j,
     dx = path[tip].x - start.x,
     dy = path[tip].y - start.y;
+  // Once a rest is taken off, the stroke itself must still rise: a finger that
+  // only trembled on the dart (within `stillPx`) was a tap.
+  if (!upward(dx, dy, width)) return null;
   // Bow: the path's furthest point from the straight line, per stroke length.
   // Slowdown: the largest fall in speed from its peak so far, up to the lift
   // (a pause counts in full). Only full windows count, so jitter while the
