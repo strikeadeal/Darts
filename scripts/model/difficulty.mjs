@@ -172,7 +172,7 @@ const calm = (plan, p) => {
 // ------------------------------------------------------------------ aiming
 // A player can learn where a stroke lands on average, never which way a sloppy
 // stroke's scatter falls, so aiming uses the landing without it.
-const costs = ["outside", "bendCost", "slowdownCost"];
+const costs = ["outside", "bendCost", "pauseCost"];
 function clean(model, fn) {
   const t = model.tune?.input;
   if (!t || !(costs[0] in t)) return fn();

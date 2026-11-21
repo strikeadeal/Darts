@@ -97,13 +97,17 @@ test("a pause before letting go is a fault that grows with the pause, not a soft
   const g = tune.input;
   const flick = readPath(steady(0.6, g.cruise, { lift: g.liftMs }));
   assert.equal(flick.miss, 0); // the lift itself is not a pause
+  // A brief rest is free (`pause` ms); beyond it, `pauseCost` mm for every ms.
   let last = 0;
-  for (const pause of [10, 40, 80, 160]) {
+  for (const pause of [10, g.pause, g.pause + 30, g.pause + 110]) {
     const s = readPath(steady(0.6, g.cruise, { lift: g.liftMs + pause }));
-    assert.ok(Math.abs(s.speed - flick.speed) < 1e-9, "the release speed is the flick's");
-    assert.ok(s.miss > last, `${pause} ms`);
+    assert.ok(Math.abs(s.speed - flick.speed) < 1e-9, "the speed is the flick's");
+    assert.ok(Math.abs(s.pause - pause) < 1e-9);
+    assert.ok(Math.abs(s.miss - g.pauseCost * Math.max(0, pause - g.pause)) < 1e-9, `${pause} ms`);
+    assert.ok(s.miss >= last);
     last = s.miss;
   }
+  assert.ok(last > 100);
   // Resting there with the finger trembling (small moves instead of none) is the
   // same pause: the release is still the flick's.
   const flicked = steady(0.6, g.cruise);
@@ -112,12 +116,13 @@ test("a pause before letting go is a fault that grows with the pause, not a soft
   for (let k = 1; k <= 12; k++) trembling.push([t + 8 * k, x + (k % 2 ? 0.8 : -0.5) / W, y + (k % 3) * 0.3 / W]);
   const rest = readPath(trembling);
   assert.ok(Math.abs(rest.speed - g.cruise) < 0.05);
-  assert.ok(rest.faults.slowdown > 20);
-  // Sliding to a spot and stopping (pointer aiming) lands far short and is marked.
+  assert.ok(rest.pause > g.pause); // 96 ms trembling in place
+  assert.ok(rest.faults.pause > 0);
+  // Sliding to a spot and stopping (pointer aiming): where it stops doesn't aim
+  // (the slide's peak speed sets the height), and the stop is a heavy fault.
   const slide = [[0, 0, 0], [150, 0, -0.5], [300, 0, -0.6], [450, 0, -0.6]];
-  const stop = throwPath(slide);
-  assert.ok(Math.hypot(stop.x, stop.y) > 120, "well off the slide's aim");
-  assert.ok(readPath(slide).faults.slowdown > 0);
+  assert.ok(Math.abs(readPath(slide).speed - 0.5 / 0.15) < 1e-9);
+  assert.ok(readPath(slide).faults.pause > 50); // a 150 ms stop
 });
 
 test("stroke quality: clean strokes earn no miss, and faults earn more the worse they are", () => {
@@ -136,18 +141,21 @@ test("stroke quality: clean strokes earn no miss, and faults earn more the worse
   assert.equal(bends[0], 0);
   assert.ok(rising(bends));
   assert.ok(Math.abs(bends[2] - bends[1] - 2 * g.bendCost) < 0.1);
-  // Slowing before the lift: the last fifth of the stroke at a fraction of the speed.
-  const slowing = [0.95, 0.7, 0.5, 0.3].map((f) => {
+  // Easing off before the lift (the last third of the stroke at a fraction of the
+  // speed) is how a soft throw ends: free, and it lands where the flick's peak says.
+  const eased = [0.95, 0.7, 0.5, 0.3].map((f) => {
     const t1 = (0.4 / 3) * 1000,
       t2 = t1 + (0.2 / (3 * f)) * 1000;
     const path = [];
     for (let t = 0; t <= t1; t += 8) path.push([t, 0, (-0.4 * t) / t1]);
     for (let t = t1 + 8; t < t2; t += 8) path.push([t, 0, -0.4 - (0.2 * (t - t1)) / (t2 - t1)]);
     path.push([t2, 0, -0.6]);
-    return readPath(path).faults.slowdown;
+    return readPath(path);
   });
-  assert.equal(slowing[0], 0);
-  assert.ok(rising(slowing));
+  for (const e of eased) {
+    assert.equal(e.miss, 0);
+    assert.ok(Math.abs(e.speed - 3) < 1e-9); // the peak: 0.4 widths in 133 ms
+  }
   // Far outside the comfortable speeds, either way.
   const speeds = [0.99 * g.fast, 1.5 * g.fast, 2 * g.fast].map((v) => readPath(steady(0.6, v)).faults.speed);
   assert.equal(speeds[0], 0);
@@ -220,7 +228,7 @@ test("a human-like flick reads the same at 60, 120 and 240 Hz, and at every boar
   const wanted = readPath(path);
   for (const width of [169, 320, 428]) {
     const actual = readPath(dense, width);
-    for (const key of ["line", "length", "speed", "bend", "slowdown", "miss"])
+    for (const key of ["line", "length", "speed", "bend", "pause", "miss"])
       assert.ok(Math.abs(actual[key] - wanted[key]) < 1e-9, `${key} at ${width}`);
     const a = throwPath(dense, width, 5),
       b = throwPath(path, W, 5);
@@ -319,4 +327,24 @@ test("old saves replay and score exactly as they were thrown", () => {
   // 180, then T20 T20 leaves 1 (bust, back to 121), then T20 and single 20.
   assert.deepEqual(status(x01).totals, [41]);
   assert.deepEqual(status(x01).visits.map((v) => v.bust), [null, "one", null]);
+});
+
+test("the lower doubles take a natural soft throw, however much it eases off before the lift", () => {
+  // A soft throw at D16 or D15 is a minimum-jerk stroke that slows towards the lift;
+  // the later the finger lifts (tau: 0.5 at peak speed, 1 stopped), the more it has
+  // eased off. Its peak sets the height, so every lift lands in the double.
+  const g = tune.input,
+    k = g.sensitivity,
+    w = 340;
+  const model = { addSample, releaseThrow };
+  for (const [x, y, label] of [[-134.3, 97.6, "Double 16"], [134.3, 97.6, "Double 15"]]) {
+    const plan = (peak, tau) => ({ L: g.bullRise, peak, theta: (x / (k * g.aim)) * (Math.PI / 180), tau, bend: 0, stall: 0, dwell: 30, tremor: null });
+    // Learn the peak that lands there with a lift at peak speed (as a player would).
+    let peak = g.cruise * 2 ** (-y / (k * g.height));
+    for (let n = 0; n < 3; n++) peak *= 2 ** ((synth(model, plan(peak, 0.55), w, 60, random(3)).y - y) / (k * g.height));
+    for (const tau of [0.55, 0.7, 0.8, 0.9, 0.97]) {
+      const hit = synth(model, plan(peak, tau), w, 60, random(3));
+      assert.equal(scoreAt(hit.x, hit.y).label, label, `${label}, lift at ${tau}: ${hit.x.toFixed(1)}, ${hit.y.toFixed(1)}`);
+    }
+  }
 });

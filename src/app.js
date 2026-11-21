@@ -382,7 +382,7 @@ function sheet(title, body, bind) {
 function help() {
   sheet(
     "How to play",
-    '<ol class="steps"><li><strong>Pick up the dart.</strong><small>Put your finger on the dart beneath the board.</small></li><li><strong>Flick it up.</strong><small>The faster the flick, the higher the dart lands. Lean the stroke left or right to aim. Start with a medium flick at the bull.</small></li><li><strong>Keep it clean.</strong><small>Swipe straight and let go while your finger is still moving. A curved, slowing or paused stroke scatters the dart.</small></li></ol><p class="body-copy">The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50.</p><p class="body-copy"><strong>Nine Dart Rush.</strong> Three darts per visit, three visits each. Highest total wins.</p><p class="body-copy"><strong>301.</strong> Count down from 301 to exactly zero. The last dart must be a double or the bull. Going below zero, leaving 1 or reaching zero any other way is a bust: the visit ends and your score goes back. Empty dart slots suggest a checkout. Ten rounds each; if nobody finishes, the lowest score wins.</p><button class="primary full" id="okay">Got it</button>',
+    '<ol class="steps"><li><strong>Pick up the dart.</strong><small>Put your finger on the dart beneath the board.</small></li><li><strong>Flick it up.</strong><small>The faster the flick, the higher the dart lands. Lean the stroke left or right to aim. Start with a medium flick at the bull.</small></li><li><strong>Keep it clean.</strong><small>Swipe straight and let go without stopping. A curved or paused stroke scatters the dart.</small></li></ol><p class="body-copy">The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50.</p><p class="body-copy"><strong>Nine Dart Rush.</strong> Three darts per visit, three visits each. Highest total wins.</p><p class="body-copy"><strong>301.</strong> Count down from 301 to exactly zero. The last dart must be a double or the bull. Going below zero, leaving 1 or reaching zero any other way is a bust: the visit ends and your score goes back. Empty dart slots suggest a checkout. Ten rounds each; if nobody finishes, the lowest score wins.</p><button class="primary full" id="okay">Got it</button>',
     () => {
       $("#okay").onclick = () => $("#modal").close();
       $("#sheet-title").onclick = probeTap;
@@ -523,7 +523,7 @@ const throwControl = `<button class="throw-control" id="throw" aria-label="Throw
     <span class="dart-grip">${readyDart}</span>
     <b class="hint">Flick the dart up</b><small>Faster flies higher · keep it straight</small>
   </button>
-  <span class="sr" id="throw-keys">Touch the dart and flick it up: the faster the flick, the higher it lands. Keep the stroke straight and let go while still moving. On a keyboard, aim with the arrows, then press and release Space or Enter. Shift and arrows fine-tune your aim.</span>`;
+  <span class="sr" id="throw-keys">Touch the dart and flick it up: the faster the flick, the higher it lands. Keep the stroke straight and let go without stopping. On a keyboard, aim with the arrows, then press and release Space or Enter. Shift and arrows fine-tune your aim.</span>`;
 
 function play(impactClass = "", leaving = false) {
   const s = status(match),
@@ -625,7 +625,7 @@ function coach(stroke, { x, y }) {
   if (mm >= 6)
     return {
       bend: "Keep the stroke straight",
-      slowdown: "Let go while still flicking",
+      pause: "Let go without stopping",
       speed: stroke.speed > tune.input.fast ? "Too hard · flick softer" : "Too soft · flick harder",
     }[fault];
   if (!stroke || Math.hypot(x, y) <= 170) return "";
