@@ -5,7 +5,7 @@ const set = (tune, values) => {
   Object.assign(tune.input, values);
   return () => Object.assign(tune.input, saved);
 };
-const noQuality = { outside: 0, bendCost: 0, pauseCost: 0 };
+const noQuality = { outside: 0, bendCost: 0, slowdownCost: 0 };
 // The old balance of height: length-led at 700 mm per board width, and a speed
 // effect of 32 mm per 2.8 widths/s at the neutral speed (22 mm per doubling).
 const lengthLed = { reach: 700, height: 22 };
