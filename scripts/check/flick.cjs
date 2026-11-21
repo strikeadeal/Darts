@@ -133,13 +133,13 @@ const recorder = () => {
       });
     }
     const runs = {
-      neutral: await stroke(0.6, 4),
-      bowed: await stroke(0.6, 4, { bow: 0.12 }), // not a visit's last dart, so its prompt shows
-      fast: await stroke(0.6, 8),
+      neutral: await stroke(0.6, 5),
+      bowed: await stroke(0.6, 5, { bow: 0.12 }), // not a visit's last dart, so its prompt shows
+      fast: await stroke(0.6, 10),
     };
     if (await p.$("#panel > :not(.ghost) #next")) { const nb = await p.locator("#panel > :not(.ghost) #next").boundingBox(); await tp("touchStart", nb.x + 20, nb.y + 20); await sleep(40); await tp("touchEnd"); await sleep(900); }
-    runs.paused = await stroke(0.6, 4, { pause: 150 });
-    runs.slow = await stroke(0.6, 2);
+    runs.paused = await stroke(0.6, 5, { pause: 150 });
+    runs.slow = await stroke(0.6, 2.5);
     for (const [k, r] of Object.entries(runs)) if (!r.same) fail(`${k}: the saved hit is not the model's ` + JSON.stringify(r));
     if (!(runs.fast.hit.y < runs.neutral.hit.y - 60 && runs.slow.hit.y > runs.neutral.hit.y + 60)) fail("speed order " + JSON.stringify(runs));
     if (runs.neutral.label !== "Bullseye") fail("neutral flick " + JSON.stringify(runs.neutral));

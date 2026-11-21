@@ -92,10 +92,10 @@ test("swipe direction, length and release speed determine the impact in board co
   // The release speed that puts a straight 60% stroke at height y.
   const speedFor = (y) => g.cruise * 2 ** (-y / (k * g.height));
   for (const width of [169, 227, 340, 400]) {
-    assert.equal(swipeLanding(0, -(width / 3 - 1), width), null);
+    assert.equal(swipeLanding(0, -(width * g.minimumRise - 1), width), null);
     assert.deepEqual(swipeLanding(0, -0.6 * width, width), { x: 0, y: 0 });
     // At the neutral speed, length alone only nudges the dart off the bull...
-    const minimum = swipeLanding(0, -width / 3, width);
+    const minimum = swipeLanding(0, -width * g.minimumRise, width);
     assert.ok(minimum.y > 0 && minimum.y < radii.trebleIn);
     assert.ok(Math.abs(swipeLanding(0, -0.9 * width, width).y + 0.3 * k * g.reach) < 1e-9);
     // ...release speed carries it: soft to the bottom of the board, hard to the top.

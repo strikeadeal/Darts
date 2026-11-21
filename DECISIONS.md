@@ -138,7 +138,7 @@ Two problems: a throw could start anywhere on the playfield, and players said a 
 
 ### Gesture
 
-- **A stroke starts only on the dart.** The target is the dart's painted outline at rest, grown by 12 px on every side and never under 48 px across, then made 20% taller about its middle (`tune.grab` in `src/throw.js`, tested in `tests/grab.test.js`; see "Taller pickup"). The painted dart is at least 40×83 px (320×568), so the target is 64×128 px there and 64–75 px wide everywhere. That clears the 44 px iOS minimum without reaching the board or the floor beside the dart.
+- **A stroke starts only on the dart.** The target is the dart's painted outline at rest, grown by 12 px on every side and never under 48 px across, then made 50% taller about its middle (`tune.grab` in `src/throw.js`, tested in `tests/grab.test.js`; see "Taller pickup" and "Firmer throws"). The painted dart is at least 40×83 px (320×568), so the target is 64×161 px there and 64–75 px wide everywhere. That clears the 44 px iOS minimum without reaching the board or the floor beside the dart.
 - **Pickup.** Touching the dart draws it back into the existing hand pose and dims the prompt, so the finger clearly has it. The dart's resting drop shadow is dropped at the same moment (see Lag).
 - **A touch elsewhere** costs nothing and never throws. The prompt turns amber with "Touch the dart to pick it up" (also announced to VoiceOver) and the dart pulses once. A touch that is spent finishing a camera move or effect gets no cue, so tapping to skip stays quiet.
 - **After a skipped camera move.** The room's capture-phase handler now rewinds the running moves to their start, notes where the dart was, then finishes them. The target spans from there to where the dart settles, so a touch anywhere on the path the player saw the dart travel picks it up. A touch after the move has ended uses the settled dart only.
@@ -610,7 +610,7 @@ Players say the throw is too easy. This section supersedes "Identical releases s
 
 Everything below is in `tune.input` in `src/throw.js`. Lengths are board widths and speeds are board widths per second, so the feel is the same on every iPhone and orientation.
 
-- **Release speed sets the height.** A clean release lands `height × sensitivity` (83.6 mm) higher for each doubling of its speed. The curve is logarithmic because a person's speed error grows with the speed (a fast flick is off by about as many percent as a slow one), so on a log curve the spread in millimetres is the same at every height. With a short stroke the bottom double needs a soft flick of about 1.1 board widths per second; with a long one the top double needs about 14.5. The bull at the calibrated length needs `cruise` (4, an ordinary flick).
+- **Release speed sets the height.** A clean release lands `height × sensitivity` (83.6 mm) higher for each doubling of its speed. The curve is logarithmic because a person's speed error grows with the speed (a fast flick is off by about as many percent as a slow one), so on a log curve the spread in millimetres is the same at every height. With a short stroke the bottom double needs a soft flick of about 1.4 board widths per second; with a long one the top double needs about 18. The bull at the calibrated length needs `cruise` (5, a firm flick).
 - **Stroke length is a small nudge.** `reach × sensitivity` is 35 mm per board width: half as long again moves the dart 11 mm, against 84 mm for a doubling of speed. It stays small on purpose: a 60 Hz screen only knows where the finger was up to a frame before it lifted, so any position-based height inherits that frame as noise (below).
 - **Calibration.** A straight stroke of `bullRise` (60% of the board width) released at `cruise` still hits the bull exactly.
 - **The line.** The stroke's overall direction sets it at `aim × sensitivity` (6.07 mm per degree from straight up), so line and height are independent: a longer or faster stroke doesn't also move sideways. The direction of the release takes `flickSteer` (25%) of the line, so a late sideways flick still trims it. Once that flick bends the path past the free allowance, it is a fault.
@@ -618,10 +618,10 @@ Everything below is in `tune.input` in `src/throw.js`. Lengths are board widths 
 - **Stroke quality.** Three measured faults, each free up to an allowance and then costing millimetres:
   - **Bend:** the path's furthest point from a straight line, as a share of its length. 2.5% free, then 6 mm per percent.
   - **Slowdown:** the largest fall in speed from its peak before the lift, a pause counting in full. 10% free, then 1.5 mm per percent. A pause of 40 ms costs about 50 mm.
-  - **Speed outside 0.6–19 widths/s:** 40 mm per doubling beyond. The board needs about 1.1–14.5, so this only catches extreme strokes.
+  - **Speed outside 0.6–23 widths/s:** 40 mm per doubling beyond. The board needs about 1.3–18, so this only catches extreme strokes.
 - **The miss.** A stroke misses its release point by exactly the sum of its faults, in a direction drawn from a seed. Within the allowances the miss is zero.
 - **The prompt coaches.** After a throw whose biggest fault cost 6 mm or more, the next dart's prompt says what to fix: "Keep the stroke straight", "Let go while still flicking", "Too hard · flick softer" or "Too soft · flick harder". After a clean throw that left the board, it says which way: "Too high · flick softer", "Too low · flick harder" or "Too wide · straighten your line". Screen readers hear it after the score. It is not shown after a visit's last dart, when the hand-off card is up.
-- **Unchanged.** Validity is the same: upward travel of at least a third of the board width and the same slope rule, so short, sideways and downward strokes still cost nothing. The flight takes `pace` (now log speed between `cruise` and `fast`) and `line` exactly as before, so a hard flick still flies flatter and quicker (202–270 ms). The tip still ends on the saved point, and `flyDart`, `entryPose`, `scoreAt`, the grab rule, the room, the layout, the rules of both games, `dartshift.save.v1`, `dartshift.301.v1` and `dartshift.resume` are untouched.
+- **Unchanged.** Validity is the same: upward travel of at least a third of the board width (a quarter since 21 November) and the same slope rule, so short, sideways and downward strokes still cost nothing. The flight takes `pace` (now log speed between `cruise` and `fast`) and `line` exactly as before, so a hard flick still flies flatter and quicker (202–270 ms). The tip still ends on the saved point, and `flyDart`, `entryPose`, `scoreAt`, the grab rule, the room, the layout, the rules of both games, `dartshift.save.v1`, `dartshift.301.v1` and `dartshift.resume` are untouched.
 
 ### "Repeatable", redefined
 
@@ -775,6 +775,24 @@ Players found the area that starts a flick too small: touches just above or belo
 - **Width unchanged,** so a touch beside the dart on the floor still doesn't pick it up.
 - **The reach test starts lower.** Its start points (the target's lowest point) moved down by 10% of the padded dart height: 554.7, 396.3, 395.5 and 397 px. Every bed is still reachable with a comfortable flick from there.
 - **Checked in Chromium at 393×852:** a touch 4 px above or below the old target now picks up the dart and throws, where it was refused before; 4 px to the side is still refused.
+
+## Firmer throws · 21 November 2026
+
+Three changes on request: a taller swipe box, a shorter minimum swipe, and a firmer swipe for every throw, so a soft throw takes a real swipe instead of a crawl.
+
+- **Taller pickup target.** `grab.tall` 1.2 → 1.5: the padded target is now 50% taller than the dart's own, centred on it, with the width unchanged. At 393×852 it is 243 px tall (was 194); at 320×568, 161 px (was 128). On the four smallest layouts it now reaches past the bottom of the screen, so the reach test starts strokes at the screen's bottom edge.
+- **Shorter minimum swipe.** `minimumRise` ⅓ → ¼ of the board width. The slope rule is unchanged, so sideways and downward strokes are still rejected. A short stroke lands at most 12 mm lower than the calibrated one at the same speed.
+- **Firmer everywhere.** `cruise` 4 → 5 widths/s; sensitivity stays 0.88, so a given percentage change in speed moves the dart as far as before. The bottom double needs about 1.3–1.4 widths/s (was about 1.0), the bull 5, the top double about 18 (was 14.5). `fast` 19 → 23 keeps the top double inside the comfortable range the reach test asks for (now 0.72–18.4).
+- **Chosen over two alternatives.** Making only the lower half firmer would have made it more sensitive to speed slips. Undoing the sensitivity cut would have made the whole board more sensitive again. With this choice the feel per swipe stays the same; every throw takes a harder swipe.
+
+**Model** (casual / skilled): T20 9.8% / 37.9%, D16 11.5% / 41.8%, Nine Dart Rush 159 / 315, 301 in 24.6 / 11.2 darts (79% / 100% within ten rounds). That is about the same as before, because the modelled players aim at whatever speed a target needs. First darts on the board 97–99%.
+
+**Cost: more touch noise at the top on 60 Hz.** The top doubles now need a flick of about 18 widths/s, which spans fewer touch samples. Touch sampling alone spreads a skilled D20 8.0 mm in height at 60 Hz (was 5.6) and 2.7 mm at 120 Hz (was 2.1); T20 4.1 and 1.9 mm. The bull and lower half are under 1.5 mm.
+
+**Checks.** The rejection tests now follow `minimumRise` instead of a fixed third. The extreme-throw test's long stroke is now 15 widths/s, because at the new neutral speed the old 10 widths/s case is a firm, on-board throw (D20). In Chromium at 393×852 and 320×568:
+- A touch 4 px beyond the old 1.2 target, above or below the dart, picks it up.
+- A touch beside the dart doesn't.
+- A 0.28-width swipe throws; a 0.22-width swipe is refused with "Flick further up to throw".
 
 ## The flick verification · 20 November 2026
 
