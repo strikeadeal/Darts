@@ -27,10 +27,11 @@ const polar = (deg, r) => [
   -Math.cos((deg * Math.PI) / 180) * r,
 ];
 function band(a, b, inner, outer, color) {
+  return '<path fill="' + color + '" d="' + bandPath(a, b, inner, outer) + '"/>';
+}
+function bandPath(a, b, inner, outer) {
   return (
-    '<path fill="' +
-    color +
-    '" d="M' +
+    "M" +
     polar(a, inner) +
     " L" +
     polar(a, outer) +
@@ -48,7 +49,7 @@ function band(a, b, inner, outer, color) {
     inner +
     " 0 0 0 " +
     polar(a, inner) +
-    ' Z"/>'
+    " Z"
   );
 }
 const barrelGrooves = [21, 24, 28, 34, 37, 41]
@@ -203,12 +204,62 @@ export function landed(hit, effect = "") {
       </g></g>`;
 }
 
-export function board(hits, impactClass = "") {
+// 301's finishing highlight (DECISIONS.md, "First to zero"). For a checkout()
+// label: the beds that score exactly what is left (`hit`), and the other beds of
+// the same number or the bulls that score more and would bust (`bust`). Each is
+// { a, b, inner, outer }: degrees clockwise from the top, and board mm, the same
+// edges the face is drawn from and scoreAt() reads.
+const bedValue = (l) =>
+  l === "Bull" ? 50 : l === "25" ? 25 : ({ T: 3, D: 2 }[l[0]] ?? 1) * Number(l.replace(/^[TD]/, ""));
+export function finishBeds(label) {
+  const left = bedValue(label);
+  const bull = label === "Bull" || label === "25";
+  const i = sectors.indexOf(Number(label.replace(/^[TD]/, ""))),
+    a = i * 18 - 9;
+  const rings = bull
+    ? [
+        [0, radii.bull, 50],
+        [radii.bull, radii.outerBull, 25],
+      ].map(([inner, outer, points]) => ({ a: 0, b: 360, inner, outer, points }))
+    : [
+        [radii.outerBull, radii.trebleIn, 1],
+        [radii.trebleIn, radii.trebleOut, 3],
+        [radii.trebleOut, radii.doubleIn, 1],
+        [radii.doubleIn, radii.edge, 2],
+      ].map(([inner, outer, m]) => ({ a, b: a + 18, inner, outer, points: m * sectors[i] }));
+  return {
+    number: bull ? null : sectors[i],
+    hit: rings.filter((r) => r.points === left),
+    bust: rings.filter((r) => r.points > left),
+  };
+}
+const disc = (r) => (r ? `M0 ${-r}A${r} ${r} 0 1 1 0 ${r}A${r} ${r} 0 1 1 0 ${-r}Z` : "");
+const shape = ({ a, b, inner, outer }) =>
+  b - a === 360 ? disc(outer) + disc(inner) : bandPath(a, b, inner, outer);
+// Drawn in the face's own projection, so it sits exactly on its beds. A dark
+// edge under a light one reads on cream, black, red and green alike; the busting
+// beds are darkened, and the number on the rim gets a badge.
+export function finishMark(label) {
+  if (!label) return "";
+  const { number, hit, bust } = finishBeds(label);
+  const d = hit.map(shape).join(""),
+    no = bust.map(shape).join("");
+  let badge = "";
+  if (number) {
+    const [x, y] = polar(sectors.indexOf(number) * 18, 185);
+    badge = `<circle class="finish-badge" cx="${x}" cy="${y}" r="16"/><text x="${x}" y="${y + 6.5}">${number}</text>`;
+  }
+  return `<g transform="matrix(1 0 ${tune.camera.skew} ${tune.camera.faceHeight} 0 0)">${no ? `<path class="finish-bust" fill-rule="evenodd" d="${no}"/>` : ""}<path class="finish-edge" fill-rule="evenodd" d="${d}"/><path class="finish-line" fill-rule="evenodd" d="${d}"/>${badge}</g>`;
+}
+
+// `target` is the finishing highlight's label (src/game.js finishTarget), or null.
+export function board(hits, impactClass = "", target = null) {
   const darts = hits
     .map((hit, i) => landed(hit, i === hits.length - 1 ? impactClass : ""))
     .join("");
   return `<svg class="board" viewBox="-211 -211 422 422" role="img" aria-label="Dartboard, twenty at the top">
     <g class="board-plane" transform="matrix(1 0 ${tune.camera.skew} ${tune.camera.faceHeight} 0 0)">${face}</g></svg>
+    <svg class="finish" viewBox="-211 -211 422 422" aria-hidden="true" data-bed="${target ?? ""}">${finishMark(target)}</svg>
     <svg class="approach" viewBox="-100 -100 200 200" aria-hidden="true"></svg>
     <svg class="board-objects" viewBox="-211 -211 422 422" aria-hidden="true">${darts}
     <g id="sight" visibility="hidden" fill="none" stroke-width="2"><circle r="10" stroke="#151515" stroke-width="5"/><circle r="10" stroke="#fff"/><circle r="2" fill="#ff5732"/></g>
