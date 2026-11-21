@@ -16,11 +16,11 @@ export const tune = {
     window: 0.15,
     liftMs: 20,
     stillPx: 2,
-    // Where a clean flick lands. A straight stroke of `bullRise` released at
-    // `cruise` hits the bull. Release speed is the main height control.
-    cruise: 4, // board widths/s: an ordinary, unforced flick (about 250 mm/s on a phone)
+    // Where a clean flick lands. A straight stroke of `bullRise` peaking at
+    // `cruise` hits the bull. The stroke's peak speed is the main height control.
+    cruise: 4.5, // board widths/s: the peak of an ordinary, unforced flick
     bullRise: 0.6,
-    height: 95, // mm higher for each doubling of release speed
+    height: 95, // mm higher for each doubling of peak speed
     reach: 40, // mm higher per board width of extra stroke length
     aim: 6.9, // mm sideways per degree the stroke leans from straight up
     flickSteer: 0.25, // share of the line set by the release direction; the rest by the whole stroke
@@ -28,12 +28,12 @@ export const tune = {
     // Stroke quality. Each fault past its free allowance adds a miss of this
     // many mm, in a direction seeded by the stroke itself.
     slow: 0.6,
-    fast: 19, // the comfortable release speeds: the board spans about 1.1 to 14.5
+    fast: 21, // the comfortable peak speeds: the board spans about 1.2 to 16.3
     outside: 40, // mm per doubling of speed outside them
     bend: 2.5, // % of its length the path may bow from straight
     bendCost: 6, // mm per % beyond
-    slowdown: 10, // % the speed may fall from its peak before the lift
-    slowdownCost: 1.5, // mm per % beyond
+    pause: 50, // ms the finger may rest where it stopped before letting go (easing off is free)
+    pauseCost: 1, // mm per ms beyond
   },
   camera: {
     faceHeight: 0.95,
@@ -202,23 +202,24 @@ export function readStroke(start, samples, width) {
     dx = path[tip].x - start.x,
     dy = path[tip].y - start.y;
   // Bow: the path's furthest point from the straight line, per stroke length.
-  // Slowdown: the largest fall in speed from its peak so far, up to the lift
-  // (a pause counts in full). Only full windows count, so jitter while the
-  // finger rests on the dart never reads as a peak.
+  // Speed: the stroke's peak up to the lift, i.e. how hard it was flicked. A soft
+  // throw naturally eases off before the finger lifts; how far it had eased
+  // never moves the dart. Only full windows count, so jitter while the finger
+  // rests on the dart never reads as a peak.
+  // Pause: how long the finger rested where it stopped before letting go, beyond
+  // the lift itself; zero for any stroke that lifts without resting.
   const chord = Math.hypot(dx, dy);
   let bow = 0,
-    peak = 0,
-    slowdown = 0;
-  path.forEach((p, i) => {
+    peak = 0;
+  path.slice(0, tip + 1).forEach((p, i) => {
     bow = Math.max(bow, Math.abs((p.x - start.x) * dy - (p.y - start.y) * dx));
     const { v, full } = velocity(i);
-    if (!full && i < tip) return;
-    peak = Math.max(peak, v);
-    slowdown = Math.max(slowdown, (peak - v) / Math.max(peak, g.slow));
+    if (full || i === tip) peak = Math.max(peak, v);
   });
   const release = velocity(tip);
+  const pause = Math.max(0, gap - g.liftMs);
   const bend = bow / (chord * chord),
-    speed = release.v;
+    speed = peak;
   // The line follows the whole stroke, turned part-way towards the release.
   const direction = Math.atan2(dx, -dy),
     off = Math.atan2(release.vx, -release.vy) - direction;
@@ -228,7 +229,7 @@ export function readStroke(start, samples, width) {
   const faults = {
     speed: g.outside * outside,
     bend: g.bendCost * Math.max(0, 100 * bend - g.bend),
-    slowdown: g.slowdownCost * Math.max(0, 100 * slowdown - g.slowdown),
+    pause: g.pauseCost * Math.max(0, pause - g.pause),
   };
   return {
     line: direction + steer,
@@ -236,9 +237,9 @@ export function readStroke(start, samples, width) {
     speed,
     turn,
     bend,
-    slowdown,
+    pause,
     faults,
-    miss: faults.speed + faults.bend + faults.slowdown,
+    miss: faults.speed + faults.bend + faults.pause,
   };
 }
 

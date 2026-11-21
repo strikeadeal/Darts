@@ -610,17 +610,17 @@ Players say the throw is too easy. This section supersedes "Identical releases s
 
 Everything below is in `tune.input` in `src/throw.js`. Lengths are board widths and speeds are board widths per second, so the feel is the same on every iPhone and orientation.
 
-- **Release speed sets the height.** A clean release lands `height × sensitivity` (83.6 mm) higher for each doubling of its speed. The curve is logarithmic because a person's speed error grows with the speed (a fast flick is off by about as many percent as a slow one), so on a log curve the spread in millimetres is the same at every height. With a short stroke the bottom double needs a soft flick of about 1.1 board widths per second; with a long one the top double needs about 14.5. The bull at the calibrated length needs `cruise` (4, an ordinary flick).
+- **Peak speed sets the height** (until 21 November: the speed at release; see "Soft throws and the lower half"). A clean stroke lands `height × sensitivity` (83.6 mm) higher for each doubling of its peak speed. The curve is logarithmic because a person's speed error grows with the speed (a fast flick is off by about as many percent as a slow one), so on a log curve the spread in millimetres is the same at every height. With a short stroke the bottom double needs a soft flick peaking at about 1.2 board widths per second; with a long one the top double needs about 16.3. The bull at the calibrated length needs `cruise` (4.5, the peak of an ordinary flick).
 - **Stroke length is a small nudge.** `reach × sensitivity` is 35 mm per board width: half as long again moves the dart 11 mm, against 84 mm for a doubling of speed. It stays small on purpose: a 60 Hz screen only knows where the finger was up to a frame before it lifted, so any position-based height inherits that frame as noise (below).
 - **Calibration.** A straight stroke of `bullRise` (60% of the board width) released at `cruise` still hits the bull exactly.
 - **The line.** The stroke's overall direction sets it at `aim × sensitivity` (6.07 mm per degree from straight up), so line and height are independent: a longer or faster stroke doesn't also move sideways. The direction of the release takes `flickSteer` (25%) of the line, so a late sideways flick still trims it. Once that flick bends the path past the free allowance, it is a fault.
 - **How the release is read.** Speed and direction are measured over the last `window` (0.15) board widths of travel, with the window's start interpolated between samples. A slow stroke is timed over longer and a fast one over less. The pointerup repeats the finger's last position, so the lift happened somewhere between the last move and the pointerup; the reading carries the stroke on to the middle of that gap (at most `liftMs`/2). A finger that rested within `stillPx` of where it lifted, for longer than a lift takes, had stopped there: the speed is the flick's, and the rest is a pause.
 - **Stroke quality.** Three measured faults, each free up to an allowance and then costing millimetres:
   - **Bend:** the path's furthest point from a straight line, as a share of its length. 2.5% free, then 6 mm per percent.
-  - **Slowdown:** the largest fall in speed from its peak before the lift, a pause counting in full. 10% free, then 1.5 mm per percent. A pause of 40 ms costs about 50 mm.
-  - **Speed outside 0.6–19 widths/s:** 40 mm per doubling beyond. The board needs about 1.1–14.5, so this only catches extreme strokes.
+  - **Pause:** how long the finger rested where it stopped before letting go, beyond the lift itself. 50 ms free, then 1 mm per ms. Easing off before the lift is free. (Until 21 November this was a slowdown fault: any fall in speed from the peak.)
+  - **Speed outside 0.6–21 widths/s:** 40 mm per doubling beyond. The board needs about 1.2–16.3, so this only catches extreme strokes.
 - **The miss.** A stroke misses its release point by exactly the sum of its faults, in a direction drawn from a seed. Within the allowances the miss is zero.
-- **The prompt coaches.** After a throw whose biggest fault cost 6 mm or more, the next dart's prompt says what to fix: "Keep the stroke straight", "Let go while still flicking", "Too hard · flick softer" or "Too soft · flick harder". After a clean throw that left the board, it says which way: "Too high · flick softer", "Too low · flick harder" or "Too wide · straighten your line". Screen readers hear it after the score. It is not shown after a visit's last dart, when the hand-off card is up.
+- **The prompt coaches.** After a throw whose biggest fault cost 6 mm or more, the next dart's prompt says what to fix: "Keep the stroke straight", "Let go without stopping", "Too hard · flick softer" or "Too soft · flick harder". After a clean throw that left the board, it says which way: "Too high · flick softer", "Too low · flick harder" or "Too wide · straighten your line". Screen readers hear it after the score. It is not shown after a visit's last dart, when the hand-off card is up.
 - **Unchanged.** Validity is the same: upward travel of at least a third of the board width and the same slope rule, so short, sideways and downward strokes still cost nothing. The flight takes `pace` (now log speed between `cruise` and `fast`) and `line` exactly as before, so a hard flick still flies flatter and quicker (202–270 ms). The tip still ends on the saved point, and `flyDart`, `entryPose`, `scoreAt`, the grab rule, the room, the layout, the rules of both games, `dartshift.save.v1`, `dartshift.301.v1` and `dartshift.resume` are untouched.
 
 ### "Repeatable", redefined
@@ -717,10 +717,10 @@ The keyboard throw keeps its exact aim. It is the way to play for anyone who can
 
 All in `tune.input`. Change one value at a time and play a few visits.
 
-- **Too hard overall:** `sensitivity` is already down to 0.88 (see "Sensitivity cut" below). Lowering it further makes the end doubles need more extreme speeds, so widen `slow` and `fast` with it; `npm test` fails if the top or bottom double drops out of comfortable reach. Lowering `bendCost` and `slowdownCost` instead eases sloppy strokes without touching clean ones.
-- **Too easy:** `sensitivity` back up (1.0, or 1.1 as first tuned; at 1.1, `slow` 0.75 and `fast` 10 were enough), or `height` up a little. To punish sloppy strokes more without touching clean ones, raise `bendCost` and `slowdownCost`.
+- **Too hard overall:** `sensitivity` is already down to 0.88 (see "Sensitivity cut" below). Lowering it further makes the end doubles need more extreme speeds, so widen `slow` and `fast` with it; `npm test` fails if the top or bottom double drops out of comfortable reach. Lowering `bendCost` and `pauseCost` instead eases sloppy strokes without touching clean ones.
+- **Too easy:** `sensitivity` back up (1.0, or 1.1 as first tuned; at 1.1, `slow` 0.75 and `fast` 10 were enough), or `height` up a little. To punish sloppy strokes more without touching clean ones, raise `bendCost` and `pauseCost`.
 - **Too random:** watch the prompt.
-  - "Let go while still flicking" after flicks that felt clean: raise `slowdown` (10 → 15). If it follows quick flick-and-lifts, also raise `liftMs` (20 → 30): it would mean iOS reports the lift later than modelled.
+  - "Let go without stopping" after throws that felt continuous: raise `pause` (50 → 80 ms).
   - "Keep the stroke straight" on your natural thumb arc: raise `bend` (2.5 → 3.5).
   - Sideways feels twitchy: lower `aim`.
 - **The bull flick lands consistently high or low:** change `cruise`, the speed of the neutral flick (higher if your medium flick lands high).
@@ -776,6 +776,47 @@ Players found the area that starts a flick too small: touches just above or belo
 - **The reach test starts lower.** Its start points (the target's lowest point) moved down by 10% of the padded dart height: 554.7, 396.3, 395.5 and 397 px. Every bed is still reachable with a comfortable flick from there.
 - **Checked in Chromium at 393×852:** a touch 4 px above or below the old target now picks up the dart and throws, where it was refused before; 4 px to the side is still refused.
 
+## Soft throws and the lower half · 21 November 2026
+
+Players found the lower half of the board, especially D16 and D15, impossible to hit. Fixed by reading the height from the stroke's peak speed and dropping the slowdown fault; a rest before letting go is still a fault, timed.
+
+### Cause
+
+Two parts of the throw reading worked against soft throws, and the lower half needs soft throws.
+
+1. **Height came from the speed at the moment of release.** A soft throw naturally eases off before the finger lifts. How far it had eased decided the height: a soft throw at D16 (peak 2 widths/s) landed 22 mm lower if lifted at 70% of the stroke rather than at its peak, and 47 mm lower at 80%. Lift timing is the least controllable part of a throw.
+2. **Easing off was a fault.** Any fall of more than 10% from the peak cost 1.5 mm per percent, in a random direction. A minimum-jerk stroke lifted at 80% of its course reads about 31% slowdown: a 32 mm random miss. A fast flick lifts while still moving and escapes it, so the scatter fell on the soft throws, and D16 and D15 also sit far to the side, where a random miss most easily leaves a narrow double. The fall was also measured more finely at slow speeds, where the reading window spans less of the deceleration: the same stroke shape cost 3 mm at 8 widths/s and 31 mm at 2.
+3. **A short rest cost everything.** A finger that eased to a stop and lifted after resting just over 20 ms counted as a pause, and the pause counted as 100% slowdown: about 135 mm.
+
+The recorded iOS Safari swipes from the reverted throw audit (bb3da0c, `simulator-flicks.json`, simulator not a hand) showed the same: seven straight, identical 150 ms swipes at the bull each read 24–27% slowdown and scattered 21–25 mm, landing from 13 to 40 mm low.
+
+The stroke model hid it: its players lift at the same point of every stroke, whatever its speed (`tau` 0.62 casual, 0.52 skilled), close to peak speed. A person ends a soft throw later in its course than a hard one.
+
+### Fix
+
+- **Peak speed sets the height:** the fastest full-window speed up to the lift, i.e. how hard the throw was. When the finger lifts on the way down from that no longer moves the dart. `cruise` 4 → 4.5 keeps the same calibration, because the model's casual flick read 4.0 at release and peaks at 4.5. The recorded ordinary iOS swipes peak at 4.58–4.62. `fast` 19 → 21 keeps the top double, now about 16.3 widths/s peak on 320×568, inside the comfortable range.
+- **Pause, not slowdown:** the fault is how long the finger rested where it stopped (within `stillPx`) before letting go, beyond the lift. 50 ms free, then 1 mm per ms. Slide and stop (100–180 ms rests) still earns 30–110 mm, and its stopping point no longer aims at all. Coaching says "Let go without stopping".
+- **Unchanged:** sensitivity, slope, line, bend, the speed range fault, scoring, rules and saves. Old hits replay exactly.
+
+### Evidence
+
+- **Recorded iOS swipes replayed:** all seven 150 ms bull swipes now land in the bullseye with no miss (before: 21–25 mm misses, landing 13–40 mm low). The soft 300 ms swipe lands at single 3 and the hard 83 ms one at single 20, both clean.
+- **New regression test:** a natural soft throw at D16 and at D15, lifted at 55%, 70%, 80%, 90% and 97% of its course, must score the double every time. It fails on the previous code at 70%.
+
+Stroke model, casual / skilled:
+
+| | D16 | T20 | Nine Dart Rush | 301 darts | Strokes with no miss |
+|---|---|---|---|---|---|
+| Before, players as modelled | 12.3% / 41.4% | 9.2% / 38.4% | 157 / 315 | 25.2 / 11.2 | 48% / 99% |
+| After, players as modelled | 14.3% / 41.8% | 11.0% / 38.8% | 174 / 319 | 22.8 / 10.9 | 56% / 99% |
+| Before, players who ease off more (lift at 80% / 70%) | 5.7% / 33.5% | 5.9% / 31.8% | 144 / 286 | 33.6 / 12.2 | 33% / 82% |
+| After, players who ease off more | 13.4% / 42.3% | 11.1% / 41.5% | 169 / 324 | 22.4 / 10.6 | 52% / 99% |
+
+- **Casual players get a little easier:** natural easing-off no longer scatters, so the Nine Dart Rush gap narrows from 2.0 to 1.83 (target ≥ 1.8). Skilled players are unchanged.
+- **Results no longer depend on when the finger lifts:** with players who ease off more, the old reading lost half the casual D16 hits; the new one loses none.
+- **Touch noise:** a skilled D20 spreads 7.1 mm at 60 Hz when lifted near peak (was 5.6) and 2.0 mm when lifted after it (was 3.1); 120 Hz is within 2.5 mm either way.
+- **Still unmeasured:** no real hand. The recorder in bb3da0c (reverted) is the way to measure when real players lift and how they end a soft throw.
+
 ## The flick verification · 20 November 2026
 
 - **Automated.** All 40 Node tests pass. `tests/throw.test.js` covers:
@@ -816,7 +857,7 @@ Players found the area that starts a flick too small: touches just above or belo
 **Real-phone feel is for you to check.** Everything above is measured, but only against a model of a thumb. On the phone, after Update game:
 - **The neutral flick.** Does a medium, natural flick hit near the bull? If it lands consistently high or low, adjust `cruise`.
 - **Both ends of the board.** Can you reach the top doubles with a hard flick and the bottom ones with a soft one, in both orientations, without straining?
-- **The prompts.** How often do they appear when you feel you threw cleanly? "Let go while still flicking" after a quick flick-and-lift would mean iOS reports the lift later than modelled: raise `liftMs`. "Keep the stroke straight" on a natural thumb arc means `bend` is too tight.
+- **The prompts.** How often do they appear when you feel you threw cleanly? "Let go without stopping" after a throw that felt continuous means `pause` is too tight. "Keep the stroke straight" on a natural thumb arc means `bend` is too tight.
 - **Learning.** Do your darts group noticeably better after a few visits? Ideally, also ask someone who has never played.
 - **Records.** Does the lobby show your old best as "Best · old throw"? Does a match you were in the middle of when you pressed Update game finish without setting a record?
 - **VoiceOver.** The coaching follows the score in the announcement.
