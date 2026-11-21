@@ -5,7 +5,7 @@
 export const tune = {
   input: {
     // Which strokes throw at all.
-    minimumRise: 1 / 3, // upward travel, board widths
+    minimumRise: 1 / 4, // upward travel, board widths
     minimumSlope: 0.35, // upward travel per unit of sideways travel
     limit: 201, // board millimetres
     // How the release is read: speed and direction over the last `window` board
@@ -18,7 +18,7 @@ export const tune = {
     stillPx: 2,
     // Where a clean flick lands. A straight stroke of `bullRise` released at
     // `cruise` hits the bull. Release speed is the main height control.
-    cruise: 4, // board widths/s: an ordinary, unforced flick (about 250 mm/s on a phone)
+    cruise: 5, // board widths/s: a firm flick, so even a soft throw takes a real swipe
     bullRise: 0.6,
     height: 95, // mm higher for each doubling of release speed
     reach: 40, // mm higher per board width of extra stroke length
@@ -28,7 +28,7 @@ export const tune = {
     // Stroke quality. Each fault past its free allowance adds a miss of this
     // many mm, in a direction seeded by the stroke itself.
     slow: 0.6,
-    fast: 19, // the comfortable release speeds: the board spans about 1.1 to 14.5
+    fast: 23, // the comfortable release speeds: the board spans about 1.3 to 18
     outside: 40, // mm per doubling of speed outside them
     bend: 2.5, // % of its length the path may bow from straight
     bendCost: 6, // mm per % beyond
@@ -78,7 +78,7 @@ export const tune = {
   grab: {
     pad: 12, // px around the painted dart where a touch still picks it up
     min: 48,
-    tall: 1.2, // the target's height × this, centred on the dart (width unchanged)
+    tall: 1.5, // the target's height × this, centred on the dart (width unchanged)
   },
 };
 

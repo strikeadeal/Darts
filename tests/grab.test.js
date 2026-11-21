@@ -45,17 +45,18 @@ test("the target never shrinks below a thumb", () => {
 // Measured in WebKit with simulated safe areas: board width, the touch target's
 // lowest point (the worst place to start a stroke), the dart's centre and the
 // safe frame. The smallest screen in each orientation, plus the notched landscape.
-// The lowest point includes `grab.tall`: 10% of the padded dart's height (83, 69 and
-// 61 px painted, measured in Chromium) below the measured padded edge.
+// With `grab.tall` (the padded dart, 83, 69 and 61 px painted as measured in Chromium,
+// stretched ×1.5 about its middle) the target reaches past the bottom of all four
+// screens, so the lowest start is the screen's bottom edge.
 // These are the full-screen layouts. Re-measured in Chromium with the installed
 // app's short layout viewport (scripts/check/viewport.cjs): --vh puts every value
 // back exactly here (see DECISIONS.md, "Full screen in the installed app").
 const layouts = [
-  { size: "320×568", board: 288, bottom: 554.7, cx: 160, frame: [0, 20, 320] },
-  { size: "667×375", board: 293.5, bottom: 396.3, cx: 319.5, frame: [0, 0, 667] },
-  { size: "852×393", board: 302, bottom: 395.5, cx: 409, frame: [59, 0, 793] },
+  { size: "320×568", board: 288, bottom: 568, cx: 160, frame: [0, 20, 320] },
+  { size: "667×375", board: 293.5, bottom: 375, cx: 319.5, frame: [0, 0, 667] },
+  { size: "852×393", board: 302, bottom: 393, cx: 409, frame: [59, 0, 793] },
   // The iPhone 14 Pro's own landscape insets (0, 20, 59, 59), read on the phone.
-  { size: "852×393 measured", board: 303, bottom: 397, cx: 409, frame: [59, 0, 793] },
+  { size: "852×393 measured", board: 303, bottom: 393, cx: 409, frame: [59, 0, 793] },
 ];
 
 test("every bed is reachable from the dart with a comfortable clean flick on the smallest screens", () => {

@@ -251,7 +251,7 @@ test("seeded scatter: the same stroke always lands the same, a clean one whereve
 
 test("flicks still require a deliberate upward stroke and extreme throws remain misses", () => {
   for (const end of [
-    [1, 0, -0.3],
+    [1, 0, 0.01 - tune.input.minimumRise], // just short of the minimum rise
     [3, 1, -0.34],
     [100, 0, 0.5],
     [100, 0, 0],
@@ -261,7 +261,7 @@ test("flicks still require a deliberate upward stroke and extreme throws remain 
   for (const end of [
     [2, -4, -2],
     [1000, 4, -3],
-    [300, 0.01, -3],
+    [200, 0.01, -3], // three widths at 15 widths/s: far over the top
   ]) {
     const hit = throwPath([[0, 0, 0], end]);
     assert.equal(scoreAt(hit.x, hit.y).points, 0);
