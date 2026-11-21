@@ -847,3 +847,109 @@ Three changes on request: a taller swipe box, a shorter minimum swipe, and a fir
 - **Learning.** Do your darts group noticeably better after a few visits? Ideally, also ask someone who has never played.
 - **Records.** Does the lobby show your old best as "Best · old throw"? Does a match you were in the middle of when you pressed Update game finish without setting a record?
 - **VoiceOver.** The coaching follows the score in the announcement.
+
+## Quick wins · 21 November 2026
+
+The nine quick wins from `REVIEW.md`. The release model is untouched: no `tune` value, `releaseThrow`, `readStroke` or `swipeLanding` changed. Every existing save key keeps its shape.
+
+### 1 · A stale tab can no longer wipe newer saves
+
+- **The bug, reproduced.** Each page read the saves once at load and wrote all of them from that copy on every `save()`. In Chromium, with two tabs open, tapping sound in the older tab erased the newer tab's 301 match and set its Nine Dart Rush record back to `null`.
+- **The fix.** `src/app.js` keeps `seen`, the saved strings as of its last read or write.
+  - **When another tab has written,** `refresh()` adopts the newer saves and redraws:
+    - the lobby is redrawn;
+    - a visit in progress is replayed, or the lobby shown if that match is over;
+    - results stay as they are.
+  - **Triggers:** a `storage` event, `pageshow`, a return to the foreground, and the capture-phase handler that already runs before every touch and key. That touch or key only brings the saves in; it does nothing else.
+  - **Records are guarded on every write.** If the disk changed since the last look, `save()` first keeps the better of each record (`mergeRecords` in `src/game.js`): the Nine Dart Rush records highest, 301 fewest, and the learn count highest.
+  - **Matches aren't merged at write time.** Which of two matches is newer can't be told from the data, so the triggers above are what protect them.
+- **Limit.** Copies of earlier releases still cached on a device don't have this, so one of them can still overwrite until it updates.
+- **Check:** `scripts/check/tabs.cjs` runs it twice: once with storage events, and once with the older tab deaf to them, so only its next touch protects the saves. Both pass. The previous release fails it at the first step.
+
+### 2 + 3 · Coaching while learning, and tips that survive the end of a visit
+
+- **`coach()` moved to `src/coach.js`,** so it can be tested without the DOM.
+  - Fault tips and directions for darts off the board are unchanged.
+  - **New:** while a device is learning, a clean dart more than 50 mm from the bull gets a tip relative to the bull. That covers anything outside the outer bull, with some margin. The tips are "Below the bull · flick harder", "Above the bull · flick softer" and "Wide · straighten your line".
+- **Learning lasts the first 45 touch darts on the device,** counted in a new key, `dartshift.learn.v1`.
+  - After that only faults and darts off the board are coached. A player aiming at treble 20 or 19 is never told to flick softer for hitting it.
+  - Keyboard throws neither count nor get tips.
+  - 45 darts is five Nine Dart Rush runs. It's a guess: raise `learnDarts` in `src/game.js` if players want help for longer.
+- **The tip now reaches the player after every throw.**
+  - When a throw ends the visit (a third dart or a 301 bust), the handoff card shows its tip.
+  - Screen readers now hear the tip in Nine Dart Rush too. A precedence slip had attached it only to the 301 announcement.
+
+### 4 · "Faster flies higher" on every layout
+
+- **Short portrait:** the second line of the prompt is shown at 12 px. That raises the resting dart about 20 px at 320×568. Taller phones and landscape are unchanged.
+  - The padded touch target, 50% taller than the dart, now reaches about 6 px into the bottom of the board's dark surround there, not into the scoring face.
+  - Tip alignment and the touch replay were re-measured at 320×568, 393×852 and 852×393 (`scripts/check/flick.cjs`); the largest tip error was 0.00002 CSS px.
+- **Landscape:** the prompt and its second line stack beside the dart. The dart's position is unchanged at 852×393 and 667×375. The longest tip ends at x = 620 and 533 px respectively.
+
+### 5 · Update notices wait for a pause
+
+- **When it shows.** The update toast is never shown on the oche shot, so it can't cover the board while a dart can be thrown. It appears in the lobby, at a handoff or on the results.
+- **Later.** A new **Later** button hides it until the next launch or the next new version.
+- **What's new.** After **Update game**, the new version shows "Updated · …" once, for six seconds, outside play. It's one line, `releaseNote` in `src/app.js`. Edit it each release.
+- **Unchanged:** Update game still reloads straight into an interrupted visit.
+
+### 6 · Persistent storage
+
+After a finished match, once per session, the game asks for persistent storage with `navigator.storage.persist()`. WebKit grants it by heuristics that favour Home Screen apps. Reports conflict on whether it returns `true` (WebKit 271401), and the answer is ignored either way.
+
+### 7 · Add to Home Screen, once, in an iPhone Safari tab
+
+- **When it shows.** All of these must hold:
+  - `navigator.standalone === false`;
+  - an iPhone or iPod user agent;
+  - at least one finished match or record on this device;
+  - the card hasn't been dismissed.
+- **What it says.** How to install, and that the installed app plays offline, full screen, with its own records, which don't carry over from the tab.
+- **Where.** In the lobby only. **OK** dismisses it for good (`dartshift.install.v1`), or for the session if storage is unavailable.
+- **Never:** in the installed app, on iPad, or in other browsers.
+
+### 8 · Duels take turns to start (revisits "per-match starter choice")
+
+- **Why this was revisited.** The 301 section left out a per-match starter choice. But Play again made rematches the normal way to play a duel, so the same seat threw first every time. In 301 that seat also wins outright with no reply visit.
+- **What changed.**
+  - A duel rematch now hands the first throw to the other player.
+  - In the data, index 0 still throws first. The match gets `first: 1`, and only names and colours swap: "Player 2" throws first, in blue.
+  - `status()`, the save shape and the rules are untouched.
+  - `decodeMatch` drops any other value of `first`.
+- **Rollback.** An older copy ignores `first` and shows the names in positional order. That's cosmetic. It still scores the match correctly and keeps the field when it saves.
+
+### 9 · Readable scoreboard labels
+
+- **Sizes.** Scoreboard and card labels go from 10 px to 11 px, and the round label from 9 px to 11 px.
+- **Wrapping.** Names on the plate stay on one line. Below 360 px wide, letter-spacing shrinks first.
+- **At 320×568,** the duel plate's "Player 2" and "Player 1 · 66" fit on one line.
+
+### Verification
+
+- **Automated.** All 48 Node tests pass, 7 of them new:
+  - `tests/coach.test.js` covers the coaching rule on both sides of 50 mm, and that it's silent after learning;
+  - `mergeRecords`;
+  - the learn key round-trip, with the other keys' shapes unchanged;
+  - the rematch flag: identical scoring with and without it, and decoding.
+- **Build.** The production build precaches 23 assets, adding `src/coach.js`.
+- **Matches.** Complete matches with `scripts/check/match.cjs` under `/Darts/` in Chromium:
+  - touch solos at 393×852 and 320×568 (reduced motion);
+  - touch duels at 852×393 and 667×375 (301, reduced motion);
+  - keyboard: a 301 solo checkout at 390×844, a 301 duel at 852×393 and a Nine Dart Rush duel at 320×568;
+  - a touch 301 solo to the round limit.
+
+  All passed with clean consoles. Every duel's Play again now asserts "Player 2" throws first.
+- **Flick checks at three sizes.** Saved hits equal the replay, and the soft stroke is now coached "Below the bull · flick harder".
+- **Screens.** Seeded screenshots checked:
+  - the tip on a handoff card and on a bust card;
+  - the install card in an emulated iPhone Safari tab, gone after OK and a reload, and never shown as standalone;
+  - the update toast: absent during play, shown at the handoff, gone after Later, back after a relaunch, and "Updated · …" once after applying.
+- **Rollback.** On one profile, the previous release, then this build, then the previous release again. The previous release kept the record and the 301 match, played on in the rematch, and kept its `first` flag.
+- **Not run.** WebKit, the iOS simulator and a phone. This session had Chromium only.
+
+**Still to check on an iPhone:**
+- whether `storage` events reach a backgrounded Safari tab;
+- what `persist()` returns, in the installed app and in a tab;
+- the install card's wording and placement, which covers the neon and the record plate's label until dismissed;
+- whether the 12 px second line is legible on an SE;
+- where the update toast sits on a notched phone.

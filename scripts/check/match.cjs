@@ -115,7 +115,17 @@ const fail = (m) => { throw new Error(m); };
   if (x01 && input === "keyboard" && (!check.out || check.winner !== 0 || busts !== 3 || (mode === "solo" && check.best !== 17))) fail("301 route " + JSON.stringify({ ...check, busts }));
   if (x01 && check.rush && Object.keys(check.rush).join() !== "match,best,muted,acknowledged") fail("save.v1 shape " + JSON.stringify(check.rush));
   if (input === "keyboard") { const id = await p.evaluate(() => document.activeElement?.id); if (id !== "again") fail("results focus on " + id); }
+  // A duel rematch hands the first throw to Player 2 (only the names swap).
+  let rematch = "";
+  if (mode === "duel") {
+    if (input === "keyboard") await p.keyboard.press("Enter"); else await tap("#again");
+    await p.waitForSelector("#throw", { timeout: 5000 });
+    const who = await p.evaluate(() => [document.querySelector(".plate .who").textContent, document.querySelector(".plate").classList.contains("p2")]);
+    const first = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)).match.first, saveKey);
+    if (who[0] !== "Player 2" || !who[1] || first !== 1) fail("rematch starter " + JSON.stringify([who[0], who[1], first]));
+    rematch = " rematch=Player 2 first";
+  }
   if (errors.length) fail("errors: " + errors.join(" | "));
-  console.log(`OK ${engine} ${game} ${size} ${mode} ${input} rm=${rm} hits=${check.hits} totals=${check.totals} "${check.title}" busts=${busts} offDart=${offDart} skipPickups=${skipPickups}`);
+  console.log(`OK ${engine} ${game} ${size} ${mode} ${input} rm=${rm} hits=${check.hits} totals=${check.totals} "${check.title}" busts=${busts} offDart=${offDart} skipPickups=${skipPickups}${rematch}`);
   await b.close(); server.close();
 })().catch((e) => { console.log(`FAIL ${engine} ${game} ${size} ${mode} ${input} rm=${rm}: ${e.message.split("\n")[0]}`); process.exit(1); });

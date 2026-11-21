@@ -11,6 +11,8 @@ import {
   sectors,
   status,
   writeSaves,
+  mergeRecords,
+  learnDarts,
 } from "../src/game.js";
 
 // A point on a named bed: "20", "T20", "D20", "25", "Bull", or "Miss".
@@ -263,4 +265,38 @@ test("flick records start fresh beside the old throw's, and a match begun before
   const old = { match: null, best: 455, muted: false, acknowledged: -1 };
   assert.deepEqual(readSaves(old, null, { rush: 300, 301: 9, carried: [] }).flick, { rush: 300, 301: 9, carried: [] });
   assert.equal(readSaves(old, null, { rush: 300 }).rush.best, 455);
+});
+
+test("the learn count has its own key and leaves the other three as they were", () => {
+  const s = readSaves(JSON.parse(JSON.stringify(v1)), null, { rush: 300, 301: 9, carried: [] }, 12);
+  assert.equal(s.learn, 12);
+  const out = JSON.parse(JSON.stringify(writeSaves(s)));
+  assert.deepEqual(Object.keys(out), [saveKeys.rush, saveKeys.x01, saveKeys.flick, saveKeys.learn]);
+  assert.equal(out[saveKeys.learn], 12);
+  assert.deepEqual(Object.keys(out[saveKeys.rush]), ["match", "best", "muted", "acknowledged"]);
+  assert.deepEqual(Object.keys(out[saveKeys.flick]).sort(), ["301", "carried", "rush"]);
+  assert.equal(readSaves(null, null, null, out[saveKeys.learn]).learn, 12);
+  for (const bad of [null, undefined, -1, 1.5, "12", {}]) assert.equal(readSaves(null, null, null, bad).learn, 0);
+  assert.equal(readSaves(null, null, null, 999).learn, learnDarts);
+});
+
+test("a write never lowers or erases a record another tab set", () => {
+  const disk = readSaves({ best: 450 }, { best: 14 }, { rush: 300, 301: 9, carried: [] }, 30);
+  const stale = readSaves({ best: 400 }, null, null, 5);
+  mergeRecords(disk, stale);
+  assert.deepEqual([stale.rush.best, stale[301].best, stale.flick.rush, stale.flick[301], stale.learn], [450, 14, 300, 9, 30]);
+  // A better record in memory wins over the disk's.
+  const mine = readSaves({ best: 500 }, { best: 8 }, { rush: 320, 301: 7, carried: [] }, 45);
+  mergeRecords(disk, mine);
+  assert.deepEqual([mine.rush.best, mine[301].best, mine.flick.rush, mine.flick[301], mine.learn], [500, 8, 320, 7, 45]);
+  // Missing or garbage on disk changes nothing.
+  for (const bad of [readSaves(null, null, null), readSaves("x", 5, "y", "z")]) {
+    const m = readSaves({ best: 450 }, { best: 14 }, { rush: 300, 301: 9, carried: [] }, 30);
+    mergeRecords(bad, m);
+    assert.deepEqual([m.rush.best, m[301].best, m.flick.rush, m.flick[301], m.learn], [450, 14, 300, 9, 30]);
+  }
+  // Matches are left alone: the app adopts the disk's before acting.
+  const a = readSaves(v1, null), b = readSaves(null, null);
+  mergeRecords(a, b);
+  assert.equal(b.rush.match, null);
 });

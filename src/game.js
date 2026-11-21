@@ -29,9 +29,14 @@ export function scoreAt(x, y) {
 }
 
 // A match is { mode: "solo" | "duel", hits } for Nine Dart Rush, the original
-// shape. 301 adds game: "301". mode is the player count either way.
-export function freshMatch(mode, game) {
-  return game === "301" ? { game, mode, hits: [] } : { mode, hits: [] };
+// shape. 301 adds game: "301". mode is the player count either way. A duel
+// rematch adds first: 1 when "Player 2" throws first. The data never changes
+// order (index 0 always throws first); only the names and colours swap, so an
+// older copy that ignores the field still scores the match correctly.
+export function freshMatch(mode, game, first = 0) {
+  const match = game === "301" ? { game, mode, hits: [] } : { mode, hits: [] };
+  if (first === 1 && mode === "duel") match.first = 1;
+  return match;
 }
 
 export const x01 = { start: 301, rounds: 10 }; // rounds per player
@@ -44,6 +49,11 @@ export function decodeMatch(value) {
     (value.game !== undefined && value.game !== "301")
   )
     return null;
+  // Only a duel can swap who is called Player 1; anything else is dropped.
+  if ("first" in value && !(value.mode === "duel" && value.first === 1)) {
+    value = { ...value };
+    delete value.first;
+  }
   if (!value.game && value.hits.length > (value.mode === "solo" ? 9 : 18))
     return null;
   if (
@@ -233,7 +243,10 @@ export const saveKeys = {
   rush: "dartshift.save.v1",
   x01: "dartshift.301.v1",
   flick: "dartshift.flick.v1",
+  learn: "dartshift.learn.v1",
 };
+// Touch darts a device throws while it gets bull-relative coaching (src/coach.js).
+export const learnDarts = 45;
 const gameNames = ["rush", "301"];
 const record = (n, low, high) =>
   Number.isInteger(n) && n >= low && n <= high ? n : null;
@@ -243,7 +256,8 @@ const seen = (n, match) =>
 // since, and `carried`: games whose match in progress began before the flick, so
 // finishing it sets no record. The first time the flick key is missing, that is
 // every match still in progress.
-export function readSaves(v1, v301, flick) {
+// learn counts touch darts up to learnDarts (its own key, so no older shape changes).
+export function readSaves(v1, v301, flick, learn) {
   const a = v1 && typeof v1 === "object" ? v1 : {},
     b = v301 && typeof v301 === "object" ? v301 : {},
     f = flick && typeof flick === "object" ? flick : null;
@@ -262,14 +276,29 @@ export function readSaves(v1, v301, flick) {
       301: record(f?.[301], 6, x01.rounds * 3),
       carried: gameNames.filter((g) => open[g] && (f ? Array.isArray(f.carried) && f.carried.includes(g) : true)),
     },
+    learn: Number.isInteger(learn) && learn >= 0 ? Math.min(learn, learnDarts) : 0,
   };
 }
-export function writeSaves({ muted, lobby, rush, 301: t, flick }) {
+export function writeSaves({ muted, lobby, rush, 301: t, flick, learn }) {
   return {
     [saveKeys.rush]: { match: rush.match, best: rush.best, muted, acknowledged: rush.acknowledged },
     [saveKeys.x01]: { match: t.match, best: t.best, acknowledged: t.acknowledged, lobby },
     [saveKeys.flick]: { rush: flick.rush, 301: flick[301], carried: flick.carried },
+    [saveKeys.learn]: learn,
   };
+}
+// Before a write, keep the better of each record on disk and in memory, so a tab
+// holding older saves can never lower or erase one (DECISIONS.md, "Quick wins").
+// Matches are not merged here: the app adopts the disk's before acting (refresh).
+// Mutates and returns `mine`.
+export function mergeRecords(disk, mine) {
+  const pick = (a, b, f) => (a === null ? b : b === null ? a : f(a, b));
+  mine.rush.best = pick(disk.rush.best, mine.rush.best, Math.max);
+  mine[301].best = pick(disk[301].best, mine[301].best, Math.min);
+  mine.flick.rush = pick(disk.flick.rush, mine.flick.rush, Math.max);
+  mine.flick[301] = pick(disk.flick[301], mine.flick[301], Math.min);
+  mine.learn = Math.max(disk.learn, mine.learn);
+  return mine;
 }
 
 export { swipeLanding } from "./throw.js";

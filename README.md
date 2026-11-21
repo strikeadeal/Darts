@@ -10,10 +10,12 @@ Dartshift is a darts game for iPhone with two games: **Nine Dart Rush**, three r
 
 The thin inner ring scores treble and the outer ring double. The outer bull scores 25, the centre scores 50, and a miss uses one dart for zero points.
 
-- **Nine Dart Rush.** Each player throws three darts per visit and gets three visits. The maximum is 540. Duels alternate visits and equal totals draw.
+- **Nine Dart Rush.** Each player throws three darts per visit and gets three visits. The maximum is 540. Duels alternate visits and equal totals draw. **Play again** after a duel hands the first throw to the other player.
 - **301.** Count down from 301 to exactly zero, finishing on a double or the bull. Going below zero, leaving 1, or reaching zero any other way is a bust: the visit ends and the score goes back to where it started. The empty dart slots on the scoreboard suggest a checkout. Each player gets ten rounds; if nobody checks out, the lowest score wins. A solo run's record is the fewest darts to finish.
 
 On a keyboard, focus the dart, aim with the arrow keys, then press and release Space or Enter to throw. Shift and arrows make finer adjustments. Escape cancels. The keyboard places the dart exactly where the sight is, as before.
+
+For your first 45 darts on a device, the prompt also says which way a clean dart missed the bull ("Below the bull · flick harder"). A tip from the last dart of a visit stays on the card between visits.
 
 Personal bests start again with the flick (released after 20 November 2026). Until you set one, the lobby shows your old record as "Best · old throw"; it is kept on the device and never overwritten. The back arrow saves your place. Select the **Resume** mode button to continue after closing the game.
 
@@ -23,7 +25,9 @@ After deployment, open [Dartshift on GitHub Pages](https://strikeadeal.github.io
 
 Launch **Dartshift** from its icon once while online and let the first download finish. The service worker caches the complete game for later launches without signal. The installed app can have a separate store from a Safari tab. Play from the icon to keep a consistent record.
 
-When a release is ready, **Update game** activates it and reloads. Your last landed dart, current matches, solo bests and sound setting persist. A waiting update also activates after all windows using the old worker close. System storage eviction or clearing website data can remove offline files and records. Open online again to restore the files.
+In an iPhone Safari tab, after your first finished match, the lobby shows these steps once.
+
+When a release is ready, the game offers **Update game** in the lobby, between visits or on the results, never while you're throwing. **Later** puts it off until the next launch. Update game activates the release and reloads, then shows one line on what changed. Edit `releaseNote` in `src/app.js` each release. Your last landed dart, current matches, solo bests and sound setting persist. A waiting update also activates after all windows using the old worker close. System storage eviction or clearing website data can remove offline files and records. Open online again to restore the files.
 
 ## Run locally
 
@@ -47,6 +51,7 @@ Push to `main`. The Pages workflow runs the scoring tests, builds `dist/`, uploa
 - `src/game.js` contains board scoring, match progression for both games, checkout routes, saved-match validation and the save format. `tests/game.test.js` and `tests/x01.test.js` exercise those rules with Node's built-in test runner.
 - `src/throw.js` holds the release model and the tuning values for gesture sensitivity, camera, flight, grip and impact. `tune.input` sets how a flick lands; [The flick](DECISIONS.md) says which values to try first on a phone. `tune.grab` sets the touch target around the dart.
 - `scripts/model/difficulty.mjs` is a model of human thumb flicks (casual and skilled) that plays the throw and reports hit rates, Nine Dart Rush and 301 against the previous release (`scripts/model/legacy-throw.mjs`). `node scripts/model/difficulty.mjs --quick` takes about a minute. `tests/throw.test.js` uses its stroke generator.
+- `src/coach.js` picks the prompt after a throw that went astray, from what the release measured; it never changes where a dart lands. `tests/coach.test.js` covers it. `scripts/check/tabs.cjs` checks that an older tab never overwrites newer saves.
 - `src/input.js` owns pointer capture, keyboard input, frame-timed presentation and cancellation. `src/art.js` draws the playable board from the scoring constants.
 - `style.css` opens with **Scene tuning**: the room's camera shots, depth, lamp and transition timings, with the landscape and short-portrait overrides beneath. `src/app.js` moves one persistent room between those shots. The play shot is untransformed, so the throw's own `tune` is unaffected.
 - `scripts/build.mjs` hashes the shipped files and worker template, then emits the scoped precache worker. Every font and image is local. The OFL font licenses are in `assets/fonts/`.

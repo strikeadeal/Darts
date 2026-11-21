@@ -61,7 +61,12 @@
       <div id="panel"></div>
     </main>
     <aside id="update" class="toast" hidden>
-      <span>New version ready.</span><button id="apply">Update game</button>
+      <span>New version ready.</span><button id="apply">Update game</button><button id="later">Later</button>
+    </aside>
+    <p id="updated" class="toast" role="status" hidden></p>
+    <aside id="install" class="toast install" aria-labelledby="install-title" hidden>
+      <p><strong id="install-title">Add Dartshift to your Home Screen.</strong> Tap Share, then Add to Home Screen. It plays offline, full screen, and keeps its own records. Records in this Safari tab don’t move to the app.</p>
+      <button id="install-ok">OK</button>
     </aside>
     <p id="storage-note" class="toast" hidden>
       Storage is unavailable. This session can still be played.
