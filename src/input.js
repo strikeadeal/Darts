@@ -154,7 +154,7 @@ export function bindThrows(field, wakeAudio, land, hint, skipped) {
     if (point) land(point, held, geo, read);
     else {
       reset();
-      hint("Flick further up to throw");
+      hint("Flick up to throw");
     }
   };
   field.onpointercancel = field.onlostpointercapture = (event) => {
