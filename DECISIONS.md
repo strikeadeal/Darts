@@ -1152,3 +1152,182 @@ This session had Playwright with Chromium only. WebKit wasn't installed, and no 
 - **Records.** The lobby should show your old 301 record as "Fewest · double out" until you set a first-to-zero one.
 - **VoiceOver on one visit under 20.** It should read "13 left. Checkout: single 13." after each dart.
 - **Safari timeline.** Ideally, a timeline of a few throws under 20 (Web Inspector), to see the frame after a landing with the highlight changing.
+
+## Three more games · 22 November 2026
+
+Players said there weren't enough game modes. This release adds the three most played darts games after x01 (which Dartshift already has as 301): **Cricket**, **Around the Clock** and **Shanghai**. Each works as a solo run with a personal best and as a pass-the-phone duel, like the other two. Nothing about Nine Dart Rush, 301, the throw or `tune` changes.
+
+### Which three, and why
+
+No governing body ranks casual darts games, and no app publishes usage shares, so this rests on how often guides and scoring apps name each game:
+
+- **x01 first, Cricket second.** Every source agrees, and scoring apps lead with these two ("Dart Scorer Cricket and X01", DartCounter, Dartly). Cricket is described as the second most popular game, especially in the United States.
+- **Around the Clock** (also "Around the World") is the game most often named after those two. It is the usual beginners' and practice game.
+- **Shanghai** is the next most common. One source calls it probably the third most played game worldwide, and it is a discipline in the British Darts Pentathlon.
+- **Killer** comes up as often as Shanghai but was left out. Its rules assume three or more players (two can play, but one player can be eliminated before getting a turn), and it has no solo form. Dartshift is one or two players on one phone.
+- **Donkey, Halve-It, Mickey Mouse, Baseball** and the rest appear much less often.
+
+Sources:
+- Dartscorner, "Darts games to play" and "How to play Cricket": https://www.dartscorner.co.uk/blogs/how-to/welche-dartspiele-kann-man-spielen
+- Wikipedia, "Cricket (darts)": https://en.wikipedia.org/wiki/Cricket_(darts)
+- DartCounter, Around the Clock: https://dartcounter.net/games/around-the-clock
+- DartCounter, Shanghai: https://dartcounter.net/games/shanghai
+- Mostdartgames, Shanghai: https://www.mostdartgames.com/shanghai.html
+- GLD Products, Killer: https://gldproducts.com/blogs/all/how-to-play-killer-darts
+
+None of these games has official rules. Below, each picks the most common version and records the variants left out.
+
+### Rules
+
+Every game: three darts a visit, players taking turns, the rules replayed from the saved darts (as 301 is), and a round limit so a match always ends.
+
+**Cricket** (`rules.cricket` in `src/game.js`):
+- **Targets:** 15 to 20 and the bull.
+- **Marks:** a single is one mark, a double two, a treble three; the outer bull one and the bull two. Three marks close a target.
+- **Points (duel).** A mark past three scores the target's value (25 on the bull) while the rival hasn't closed it. Once both players have closed a target, it is dead.
+- **Winning.** Close all seven with at least as many points as the rival, and you win at once, even mid-visit. If you've closed everything but are behind, you keep scoring on open numbers until you pass the rival.
+- **Solo has no points** ("no-score cricket"): close all seven in the fewest darts. A record needs at least 8 darts (six trebles and both bulls).
+- **Twenty rounds** (60 darts each). At the limit, more points wins, then more marks, else a draw.
+- **Left out:** cut-throat scoring (points to the rival), Tactics (doubles and trebles as targets), 10–20 Cricket.
+
+**Around the Clock** (`rules.clock`):
+- **Order:** 1, 2, …, 20, then either bull (outer or inner). This is DartCounter's "either bull" option, chosen because the bull is the hardest bed in this game (the flick model's casual player hits it 4% of the time).
+- **Any bed of the number counts** and moves you on one. The skip-ahead variant (a double moves two, a treble three) was left out: it is a house rule, and in the model it saved casual players only about three darts.
+- **Duel.** The first player to the bull wins at once, as in 301.
+- **Fifteen rounds** (45 darts each). At the limit, whoever got furthest wins; level is a draw.
+- **Solo record:** fewest darts (21–45).
+
+**Shanghai** (`rules.shanghai`):
+- **Seven rounds.** In round *n*, only *n* scores: single *n*, double 2*n*, treble 3*n*. The bulls count for nothing. Seven rounds is the most common length; the 20-round version would make a duel 120 darts.
+- **A Shanghai** is a single, a double and a treble of the round's number in one visit, in any order (inner or outer single).
+  - In a duel it wins on the spot, with no reply visit.
+  - In a solo run there is nobody to beat, so it is celebrated (callout, card, lamp) and the run plays on. It shows on the results.
+- **After seven rounds** the higher total wins; level is a draw.
+- **Solo record:** highest score (0–252).
+
+**Round limits** come from the flick model (`scripts/model/difficulty.mjs`), with the existing casual and skilled players aiming at the right bed each dart. Medians are 300 seeded games each:
+
+| Game | Casual player | Skilled player |
+|---|---|---|
+| Around the Clock | median 35 darts; 97% within 45 | median 21 darts |
+| Cricket, solo | median 35 darts; 91% within 45, 99% within 60 | median 15 darts |
+| Shanghai | median 60 points | median 144 points |
+
+The model's thumbs are probably steadier than real ones, so the limits leave room: 15 rounds for the clock and 20 for Cricket. Shanghai's length is part of its rules.
+
+### The board shows the target
+
+The three games reuse 301's highlight layer (`.finish`, drawn in the face's own matrix by `targetMark` in `src/art.js`), from `boardTargets()` in `src/game.js`. It shows nothing between visits or after the match, the same timing as 301.
+
+- **Around the Clock and Shanghai.**
+  - The number in play is outlined over all its beds, since every bed counts, and its rim number is badged.
+  - The bull, as the last clock target, is outlined as both bulls.
+  - The outline fades in when the target changes.
+- **Cricket.**
+  - Every target still worth hitting is outlined.
+  - All seven rim numbers get a badge ringed in thirds. Each third filled is one of your marks, so it reads without colour; a closed target's badge turns solid.
+  - The bull's marks ring the bull itself.
+  - A white dot on a badge means only your rival has closed it, so they score there until you do.
+  - Targets everyone has closed go dark.
+  - No fade, since it changes on most darts.
+- **The scoreboard agrees with the board.**
+  - Around the Clock's empty slots show the next targets (your target lit, then the two after).
+  - Shanghai's empty slots show what a Shanghai still needs (for example D3, T3) while one is still possible.
+  - Screen readers hear the same: "Dart 1 of 3. Next 6, 7, 8", "For a Shanghai: double 3, treble 3", and at each visit start "Aim at 7" or "Round 3: only 3s score."
+
+### Lobby
+
+- **The game switch is now one row of five that scrolls sideways.** Five names don't fit a 320 px phone in one row.
+  - **Why not two rows:** they would make the lobby panel taller, and on SE-class screens it would cover the board, which the short-portrait camera shot was tuned to keep clear.
+  - **Showing there are more:** the right edge fades to show the row continues, and the chosen game is scrolled to the middle. The page itself never scrolls.
+- **Order:** Nine Dart Rush, 301, Cricket, Around the Clock, Shanghai.
+- **Each game** has its own neon sign, tagline, mode lines and resume line. For example, "Resume solo run · Round 3 of 20 · 3 of 7 closed".
+
+### Saves and records
+
+- **One new key, `dartshift.games.v1`:** `{ cricket, clock, shanghai }`, each `{ match, best, acknowledged }`. Older cached copies never read or write it. This was checked by rolling back to the previous release, which wrote its own keys and left this one byte-for-byte unchanged.
+- **New matches** are `{ game: "cricket" | "clock" | "shanghai", mode, hits }`, plus `first` on a rematch. `decodeMatch` rejects unknown games and darts after the end, as for 301.
+- **The lobby's last game** stays in `dartshift.301.v1`'s `lobby`, which now also takes the three new ids. An older copy reads any value it doesn't know as Nine Dart Rush.
+- **`dartshift.resume`** now also takes the three new ids; an older copy treats them as "go to the lobby".
+- **Records start empty** and are kept per game: Cricket and Around the Clock fewest darts, Shanghai highest score. `mergeRecords` keeps the better of disk and memory, as for the others. Duels set no record.
+- **Unchanged:** every other key's shape (tested).
+
+### Code
+
+- **`src/game.js`:**
+  - `rules` (one object per game: its dart rule, round limit, record range and tie-break), `bedOf`, `cricketTargets`;
+  - a shared `replay()`, giving the same `status()` shape as 301 plus `state` (marks, points, progress) and each visit's per-dart `gains`;
+  - `boardTargets()`;
+  - the new key in `readSaves`, `writeSaves` and `mergeRecords`.
+- **`src/art.js`:** `targetMark()` and `wedge()`. `board()` now takes the overlay as `{ key, svg }`, so 301's finish and the new targets share one layer.
+- **`src/app.js`:**
+  - one `views` entry per new game: scoreboard, slot text and hints, card heading, callout, speech, results and record;
+  - the scrolling game row;
+  - help text;
+  - the resume id;
+  - the release note.
+  - Nine Dart Rush and 301 keep their own code paths, unchanged except for the shared overlay call.
+- **`style.css`:** the game row, and the badge, tick and dot styles.
+- **Not changed:** `src/throw.js`, `tune`, `src/input.js` and the worker. The build still precaches 23 assets.
+
+### Verification · 22 November 2026
+
+Chromium only (Playwright 1.63), under `/Darts/`. This session had no WebKit, Mac, simulator or iPhone.
+
+- **Automated.** All 73 Node tests pass.
+  - **13 new in `tests/modes.test.js`:**
+    - **Cricket:** marks by bed; closing; scoring only while the rival is open; solo without points; winning mid-visit only when level or ahead; the round-limit ranking.
+    - **Around the Clock:** order on any bed; either bull to finish; a duel won mid-visit; the round limit.
+    - **Shanghai:** round scoring; a Shanghai in any order winning a duel outright but not ending a solo; near misses; the limit.
+    - **Board targets:** between visits, after a handoff, mid-visit, after resuming and after the end; Cricket's dead and rival-closed targets.
+    - **Overlay geometry:** sampled against `scoreAt` to 0.01 mm of each edge.
+    - **Saves:** the new key's round trip, slot isolation, record ranges, merging, and rebuilding and rejecting saves.
+  - **Restated:** the learn-key test in `tests/x01.test.js` now expects the sixth key.
+  - **The tests fail when the logic breaks.** Eight deliberate breaks each failed at least one test:
+    - scoring on dead numbers;
+    - winning while behind on points;
+    - the clock accepting any higher number;
+    - a Shanghai ending a solo run;
+    - Shanghai scoring any number;
+    - targets shown between visits;
+    - no marks tie-break;
+    - a wedge one degree off.
+- **Complete matches** (`scripts/check/match.cjs`, clean consoles, results matching the saved hits). Before every dart the board's overlay equalled `boardTargets()` for the saved match, in the face's own matrix. For Around the Clock, the next slot and the plate named the lit target.
+  - **Keyboard routes:**
+    - **Around the Clock solo** at 390×844: 21 darts, record 21.
+    - **Around the Clock duel** at 852×393 and at 390×844 (reduced motion): Player 1 wins at the bull.
+    - **Cricket solo:** closed in 8 darts, record 8.
+    - **Cricket duel** at 390×844 (reduced motion, 120–0): Player 1 closes everything ahead and wins mid-visit.
+    - **Shanghai solo:** a Shanghai in round 1 and play on to 249.
+    - **Shanghai duel** at 320×568 (reduced motion): a Shanghai in round 2 wins outright.
+    - Each duel's Play again starts with Player 2.
+  - **Touch:**
+    - Around the Clock solo at 393×852 and duel at 390×844 (to the limit, drawn);
+    - Cricket solo at 320×568 (reduced motion) and duel at 667×375 (to the limit);
+    - a Shanghai duel at 852×393 (reduced motion);
+    - a Shanghai mouse solo at 375×667.
+  - **Regressions:** 301 keyboard solo and duel, a seeded 301 touch run, Nine Dart Rush touch and keyboard, and `scripts/check/finish.cjs` (301's alignment and old double-out save) all pass unchanged.
+- **Screens.** Lobby, play and results for each game at 390×844, 320×568 and 852×393, checked by eye. These fixes came from that:
+  - JavaScript's key order put 301 ahead of Nine Dart Rush in the row; the order is now explicit.
+  - Cricket's empty mark slots were invisible on the dark rim; they are now a faint cream ring.
+  - Duel Cricket had no sign of what the rival had closed; it now has the white dot.
+  - The Shanghai and Cricket callouts read "undefined"; they now read their bed.
+  - Two mode lines wrapped on the SE; they were shortened.
+- **Update, offline and rollback** (`scripts/check/modes-update.cjs`, real service worker, three builds):
+  1. The previous release (main at 16501cc) was left on a 301 visit card.
+  2. Update game to this build resumed that card with every save unchanged, and showed "Updated · Three new games…".
+  3. A Cricket solo was left on its card. Another update resumed straight into it ("Closed 20, 19").
+  4. With the server stopped, a reload launched from cache in the Cricket lobby, resumed and saved a dart.
+  5. Rolled back, the previous release showed Nine Dart Rush with two games. It wrote its own keys and left `dartshift.games.v1` byte-for-byte unchanged. Forward again, the Cricket solo was still there.
+- **Performance** (`scripts/check/flight.cjs`, now with `GAME=`), 390×844 @2 at 4× and 6× CPU slowdown, against main.
+  - **Cricket** (whose overlay changes on most darts) and **Around the Clock:** flight frames 16.7 ms median, 16.8 ms p95; contact 16.7 ms median; the frames after it 16.7 ms median.
+  - **Nine Dart Rush:** unchanged.
+  - **The odd long frame** (50–67 ms, one in about 150) shows up in main's runs too. It's this machine.
+  - **Limit:** as before, Chromium can't show paint cost. Cricket's overlay repaint after a landing needs Safari's timeline on the phone.
+
+**Still to check on the phone:**
+- **The game row.** Is it obvious that it scrolls, does a sideways swipe on it never start a throw or move the page, and is the chosen game easy to see?
+- **Cricket's badges at arm's length.** On an SE, can you read your marks (the thirds of the ring), the white rival dot and the dark dead numbers, in portrait and landscape?
+- **Around the Clock and Shanghai.** Is the lit number obvious, and do the empty slots' hints make sense?
+- **Lengths.** If casual players often hit the 15- or 20-round limits, raise `rules.clock.rounds` or `rules.cricket.rounds` in `src/game.js`.
+- **VoiceOver** on one visit of each game.

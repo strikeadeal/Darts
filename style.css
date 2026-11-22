@@ -511,7 +511,7 @@ p {
     sans-serif;
   text-anchor: middle;
 }
-.finish > g {
+.finish > .enter {
   animation: finish-in 320ms ease-out;
 }
 @keyframes finish-in {
@@ -544,6 +544,44 @@ p {
 }
 .finish text {
   fill: #101110;
+}
+/* Cricket: a target still open for the thrower is a dark badge; one everyone
+   has closed is grey. Each mark is a third of the ring round the badge. */
+.badge.open .finish-badge {
+  fill: #0b0c0a;
+  stroke: #ffc36a;
+}
+.badge.open text {
+  fill: var(--cream);
+}
+.badge.dead .finish-badge {
+  fill: #6b6b63;
+}
+.badge.dead text {
+  fill: #1c1d1a;
+}
+.badge text {
+  font-size: 16px;
+}
+.finish > .enter .badge text,
+.finish > .enter > text {
+  font-size: 20px;
+}
+.tick {
+  fill: none;
+  stroke: var(--cream);
+  stroke-opacity: 0.35;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.finish .rival {
+  fill: var(--cream);
+  stroke: #0b0c0a;
+  stroke-width: 2;
+}
+.tick.on {
+  stroke: #ffc36a;
+  stroke-opacity: 1;
 }
 /* The approach shadow: 200 board units about the impact, moved by the flight. */
 .approach {
@@ -936,10 +974,17 @@ p {
   margin-bottom: 12px;
   text-shadow: 0 1px 4px #000;
 }
-/* The game switch: Nine Dart Rush | 301. */
+/* The game switch: one row that scrolls sideways (five games don't fit a phone's
+   width). The fade on the right edge says there are more. */
 .games {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 4px;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), #0000);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), #0000);
   gap: 4px;
   padding: 4px;
   margin-bottom: 10px;
@@ -949,7 +994,20 @@ p {
     inset 0 1px 2px #000a,
     0 10px 24px #000b;
 }
+.games::-webkit-scrollbar {
+  display: none;
+}
+/* Room past the last game, so it scrolls clear of the fade (end padding on a
+   scroll container is ignored by some engines). */
+.games::after {
+  content: "";
+  flex: 0 0 24px;
+}
 .games button {
+  flex: none;
+  scroll-snap-align: start;
+  padding-inline: 14px;
+  white-space: nowrap;
   min-height: 44px;
   border-radius: 10px;
   font: var(--race);

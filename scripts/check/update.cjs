@@ -1,5 +1,5 @@
 // Update game and offline launch across the first-to-zero change. Needs Playwright; not part of the build.
-// node scripts/check/update.cjs <chromium|webkit> <previous release dist> <this build's dist>
+// node scripts/check/update.cjs <chromium|webkit> <a release from before first to zero (f2dea07) dist> <a later build's dist>
 // 1. The previous release, with a real service worker: a double-out 301 solo by keyboard is left on its
 //    "Left on 1" bust card, with mute on and a Nine Dart Rush best.
 // 2. This build is served; Update game reloads straight into that bust card, and the match plays on

@@ -6,6 +6,10 @@ import {
   checkout,
   finishTarget,
   doubleOut,
+  rules,
+  boardTargets,
+  bedOf,
+  cricketTargets,
   bustReasons,
   x01,
   readSaves,
@@ -15,7 +19,7 @@ import {
   mergeRecords,
 } from "./game.js";
 import { coach } from "./coach.js";
-import { icon, board, landed, readyDart, finishMark } from "./art.js";
+import { icon, board, landed, readyDart, finishMark, targetMark } from "./art.js";
 import { bindThrows, bindTurnButton, flyDart } from "./input.js";
 import { boardPosition } from "./throw.js";
 import { unlock, impact, whoosh, fanfare } from "./sound.js";
@@ -25,7 +29,9 @@ const $ = (s) => document.querySelector(s);
 const scene = $("#scene"),
   stage = $("#stage"),
   panel = $("#panel");
-// "1" (Nine Dart Rush, as before) or "301". Session-only: set just before an update reloads.
+// "1" (Nine Dart Rush, as before), or the game's id ("301", "cricket", "clock",
+// "shanghai"). Session-only: set just before an update reloads. An older copy
+// treats an id it doesn't know as "go to the lobby".
 const resumeKey = "dartshift.resume";
 const read = (key) => {
   try {
@@ -54,8 +60,10 @@ const saves = load();
 // Where a game's match lives. 301's is first to zero (saves.zero), except a
 // double-out match saved before that change, which stays in saves[301] and plays
 // to its end under its own rules until a new 301 match replaces it.
-const slot = (g) => (g === "rush" ? saves.rush : saves.zero.match || !saves[301].match ? saves.zero : saves[301]);
-const recordOf = (g) => (g === "rush" ? saves.flick.rush : saves.zero.best);
+// Cricket, Around the Clock and Shanghai each have their own in saves.modes.
+const slot = (g) =>
+  saves.modes[g] || (g === "rush" ? saves.rush : saves.zero.match || !saves[301].match ? saves.zero : saves[301]);
+const recordOf = (g) => (saves.modes[g] ? saves.modes[g].best : g === "rush" ? saves.flick.rush : saves.zero.best);
 let game = saves.lobby;
 let { match, acknowledged } = slot(game);
 let best = recordOf(game);
@@ -64,7 +72,8 @@ let freshBest = false;
 let cancelAim = () => {};
 function stash() {
   Object.assign(slot(game), { match, acknowledged });
-  if (game === "rush") saves.flick.rush = best;
+  if (saves.modes[game]) saves.modes[game].best = best;
+  else if (game === "rush") saves.flick.rush = best;
   else saves.zero.best = best;
 }
 function use(next) {
@@ -147,7 +156,7 @@ function shoot(shot) {
 // update waits for the lobby, a handoff or the results, and the install card
 // shows only in the lobby. One at a time, the update first.
 // One line on what this release changed, shown once after Update game. Edit per release.
-const releaseNote = "301 is now first to zero with any dart, and the board lights your finishing number.";
+const releaseNote = "Three new games: Cricket, Around the Clock and Shanghai.";
 const updatedKey = "dartshift.updated"; // session-only, set by Update game
 const installKey = "dartshift.install.v1"; // set once the install card is dismissed
 const notices = { update: false, later: false, install: false, updated: "" };
@@ -186,8 +195,8 @@ function installCheck() {
   }
   const played =
     finishedHere ||
-    [saves.flick.rush, saves.flick[301], saves.zero.best, saves.rush.best, saves[301].best].some((n) => n !== null) ||
-    [saves.rush.match, saves[301].match, saves.zero.match].some((m) => m && status(m).complete);
+    [saves.flick.rush, saves.flick[301], saves.zero.best, saves.rush.best, saves[301].best, ...Object.values(saves.modes).map((m) => m.best)].some((n) => n !== null) ||
+    [saves.rush.match, saves[301].match, saves.zero.match, ...Object.values(saves.modes).map((m) => m.match)].some((m) => m && status(m).complete);
   notices.install = !dismissed && !notices.installSeen && played;
   toasts();
 }
@@ -400,9 +409,170 @@ const games = {
     oldLabel: "Fewest · old throw",
     doubleLabel: "Fewest · double out",
   },
+  cricket: {
+    name: "Cricket",
+    neon: ["CLOSE 15 TO 20", "CRICKET"],
+    tagline: "Close 15 to 20 and the bull. Score on numbers your rival hasn't closed.",
+    solo: "Close all seven, fewest darts.",
+    duel: "Close all seven, lead on points.",
+    rounds: rules.cricket.rounds,
+    bestLabel: "Fewest darts",
+  },
+  clock: {
+    name: "Around the Clock",
+    neon: ["AROUND THE", "CLOCK"],
+    tagline: "Hit 1 to 20 in order, then the bull.",
+    solo: "Fewest darts round the board.",
+    duel: "First to the bull wins.",
+    rounds: rules.clock.rounds,
+    bestLabel: "Fewest darts",
+  },
+  shanghai: {
+    name: "Shanghai",
+    neon: ["SEVEN ROUNDS", "SHANGHAI"],
+    tagline: "Round 1 scores only 1s, round 2 only 2s, up to 7.",
+    solo: "Chase your best score.",
+    duel: "A Shanghai wins outright.",
+    rounds: rules.shanghai.rounds,
+    bestLabel: "Best score",
+  },
 };
+// Lobby order ("301" would come first in the object's own key order).
+const gameOrder = ["rush", "301", "cricket", "clock", "shanghai"];
 const is301 = () => game === "301";
-const bestText = (n = best) => (n === null ? "—" : n + (is301() ? " darts" : ""));
+const bestText = (n = best) =>
+  n === null ? "—" : n + (is301() || ["cricket", "clock"].includes(game) ? " darts" : "");
+
+// Cricket, Around the Clock and Shanghai (DECISIONS.md, "Three more games"):
+// what each shows on the scoreboard, the cards, the callout, the results and in
+// the announcements. Nine Dart Rush and 301 keep their own paths below.
+// `gain` is what a dart counted for (src/game.js replay): marks, targets or points.
+// callout() gets the dart's point; speak() gets its scoreAt() reading.
+const bedName = (hit) => {
+  const { n, times } = bedOf(hit);
+  return n === 25 ? (times === 2 ? "Bull" : "25") : n ? ["", "", "D", "T"][times] + n : "–";
+};
+const targetName = (n) => (n === 25 ? "the bull" : String(n));
+const clockAt = (s, i) => s.state.at[i];
+const clockTarget = (at) => (at < 20 ? at + 1 : 25);
+const marksOf = (s, i) => s.state.marks[i];
+const closedOf = (s, i) => cricketTargets.filter((t) => marksOf(s, i)[t] === 3).length;
+const markTotal = (s, i) => cricketTargets.reduce((k, t) => k + marksOf(s, i)[t], 0);
+const plural = (n, one) => n + " " + one + (n === 1 ? "" : "s");
+const views = {
+  cricket: {
+    who: "Marks",
+    big: (s, i) => (s.totals.length === 1 ? markTotal(s, i) : s.totals[i]),
+    summary: (s) => (s.totals.length === 1 ? closedOf(s, 0) + " of 7 closed" : byName(2).map((i) => s.totals[i]).join("–")),
+    slot: (hit, gain) => (gain ? bedName(hit) : "–"),
+    hints: () => [],
+    heading: (v) => ({
+      total: v.scored,
+      caller: v.closes ? "Closed " + v.closes.map((n) => (n === 25 ? "bull" : n)).join(", ") : v.scored ? plural(v.scored, "mark") : "No score",
+    }),
+    mine: (s, n) => [`Closed · ${closedOf(s, 0)} of 7`, `Darts · ${n}`],
+    aim: (s, i) =>
+      `${closedOf(s, i)} of 7 closed` + (s.totals.length === 2 ? `, ${plural(s.totals[i], "point")} to ${s.totals[1 - i]}` : "") + ".",
+    speak: (hit, gain, v, s, i) =>
+      `${hit.label}. ` +
+      (v.closes && gain ? `Closes ${targetName(v.closes.at(-1))}. ` : gain ? plural(gain, "mark") + ". " : "No mark. ") +
+      (s.totals.length === 2 ? plural(s.totals[i], "point") + "." : ""),
+    callout: (pt, gain, v) => ({
+      top: gain ? "+" + gain : "",
+      name: v.closes && gain ? "Closed " + (v.closes.at(-1) === 25 ? "bull" : v.closes.at(-1)) : scoreAt(pt.x, pt.y).label,
+      tier: gain >= 3 ? "premium" : gain ? "" : "miss",
+    }),
+    done: "All closed",
+    record: (s, darts) => (s.out ? darts : null),
+    toRecord: "Close all seven within " + rules.cricket.rounds + " rounds to set a best",
+    limit: "more points wins",
+    score: (s, darts, duel) =>
+      duel ? ["PTS", s.totals] : s.out ? ["DARTS", [darts]] : ["MARKS", [markTotal(s, 0)]],
+    rows: [
+      ["Darts", (s, p, mine) => mine.reduce((t, v) => t + v.hits.length, 0)],
+      ["Marks", (s, p) => markTotal(s, p) + " / 21"],
+      ["Closed", (s, p) => closedOf(s, p) + " / 7"],
+    ],
+  },
+  clock: {
+    who: "Target",
+    big: (s, i) => (clockAt(s, i) < 20 ? clockAt(s, i) + 1 : clockAt(s, i) === 20 ? "Bull" : "Done"),
+    summary: (s) => byName(s.totals.length).map((i) => "on " + (clockAt(s, i) < 20 ? clockAt(s, i) + 1 : "bull")).join(" – "),
+    slot: (hit, gain) => (gain ? bedName(hit).replace(/^[DT]/, "") : "–"),
+    // The empty slots show the next targets, as 301's show a checkout.
+    hints: (s, i, left) =>
+      Array.from({ length: left }, (_, k) => clockAt(s, i) + k)
+        .filter((at) => at < 21)
+        .map((at) => (at < 20 ? String(at + 1) : "Bull")),
+    heading: (v, s) => ({
+      total: "+" + v.scored,
+      caller: (v.scored ? "Now on " : "Still on ") + targetName(clockTarget(clockAt(s, v.player))),
+    }),
+    mine: (s, n) => [`On · ${targetName(clockTarget(clockAt(s, 0)))}`, `Darts · ${n}`],
+    aim: (s, i) => `Aim at ${targetName(clockTarget(clockAt(s, i)))}.`,
+    speak: (hit, gain, v, s, i) =>
+      `${hit.label}. ` + (s.out ? "" : (gain ? "Next: " : "Still on ") + targetName(clockTarget(clockAt(s, i))) + "."),
+    callout: (pt, gain, v, s, i) => ({
+      top: gain ? bedName(pt).replace(/^[DT]/, "") : "",
+      name: gain ? (clockAt(s, i) === 21 ? "Round the board" : "Next · " + (clockAt(s, i) < 20 ? clockAt(s, i) + 1 : "bull")) : scoreAt(pt.x, pt.y).label,
+      tier: gain ? (clockAt(s, i) === 21 ? "premium" : "") : "miss",
+    }),
+    done: "Round the board",
+    record: (s, darts) => (s.out ? darts : null),
+    toRecord: "Reach the bull within " + rules.clock.rounds + " rounds to set a best",
+    limit: "furthest round the board wins",
+    score: (s, darts, duel) => (!duel && s.out ? ["DARTS", [darts]] : ["OF 21", s.totals]),
+    rows: [
+      ["Darts", (s, p, mine) => mine.reduce((t, v) => t + v.hits.length, 0)],
+      ["Reached", (s, p) => (clockAt(s, p) === 21 ? "Bull" : clockAt(s, p) === 20 ? "20" : clockAt(s, p) || "—")],
+      ["Hit rate", (s, p, mine) => {
+        const thrown = mine.reduce((t, v) => t + v.hits.length, 0);
+        return thrown ? Math.round((100 * clockAt(s, p)) / thrown) + "%" : "—";
+      }],
+    ],
+  },
+  shanghai: {
+    who: "Score",
+    big: (s, i) => s.totals[i],
+    summary: (s) => byName(s.totals.length).map((i) => s.totals[i]).join("–") + " pts",
+    slot: (hit, gain) => String(gain),
+    // The empty slots show what a Shanghai still needs, while it can still happen.
+    hints: (s, i, left, visit, v) => {
+      const got = new Set(v?.parts || []);
+      const need = [1, 2, 3].filter((t) => !got.has(t));
+      return need.length <= left && visit.length === (v?.parts || []).length ? need.map((t) => ["", "", "D", "T"][t] + s.round) : [];
+    },
+    heading: (v) => ({ total: v.scored, caller: v.shanghai ? "Shanghai!" : v.scored ? "" : "No score" }),
+    mine: (s) => [`Total · ${s.totals[0]}`, `Best · ${bestText()}`],
+    aim: (s) => `Round ${s.round}: only ${s.round}s score.`,
+    speak: (hit, gain, v, s, i) =>
+      `${hit.label}, ${plural(gain, "point")}. ` + (v.shanghai ? "Shanghai! " : "") + `Total ${s.totals[i]}.`,
+    callout: (pt, gain, v) => ({
+      top: gain ? "+" + gain : "",
+      name: v.shanghai ? "Shanghai!" : scoreAt(pt.x, pt.y).label,
+      tier: v.shanghai || gain === 3 * v.round ? "premium" : gain ? "" : "miss",
+    }),
+    done: "Run complete",
+    record: (s) => s.totals[0],
+    limit: "highest score wins",
+    score: (s) => ["PTS", s.totals],
+    rows: [
+      ["Scoring darts", (s, p, mine) => mine.reduce((t, v) => t + v.gains.filter(Boolean).length, 0)],
+      ["Best visit", (s, p, mine) => Math.max(0, ...mine.map((v) => v.scored))],
+      ["Shanghais", (s, p, mine) => mine.filter((v) => v.shanghai).length],
+    ],
+  },
+};
+const view = () => views[game];
+// The board's overlay: 301's finish, or the target in the other games.
+function overlay() {
+  if (view()) {
+    const t = boardTargets(match, acknowledged);
+    return t && { key: JSON.stringify(t), svg: targetMark(t) };
+  }
+  const label = finishTarget(match, acknowledged);
+  return label && { key: label, svg: finishMark(label) };
+}
 // The neon sign names the game (index.html holds Nine Dart Rush for first paint).
 function sign() {
   const [top, big] = games[game].neon;
@@ -426,8 +596,16 @@ function standing(left, darts = 3) {
   const route = checkout(left, darts, doubleOut(match));
   return left + " left." + (route ? " Checkout: " + spoken(route) + "." : "");
 }
-// The last dart's outcome in 301: "bust", "out" or "".
-const noteOf = (v) => (is301() && v?.closed ? (v.bust ? "bust" : v.out ? "out" : "") : "");
+// The last dart's outcome: "bust" or "out" (game shot) in 301; "out" when the
+// rules end the match and "shanghai" for a Shanghai in the other games; or "".
+const noteOf = (v, s) =>
+  !v?.closed
+    ? ""
+    : is301()
+      ? v.bust ? "bust" : v.out ? "out" : ""
+      : view()
+        ? s?.out && v === s.visits.at(-1) ? "out" : v.shanghai ? "shanghai" : ""
+        : "";
 const visitTotal = (hits) =>
   hits.reduce((v, h) => v + scoreAt(h.x, h.y).points, 0);
 const lobbyDarts = [
@@ -445,16 +623,22 @@ function lobbyParts() {
       ? [g.bestLabel, best]
       : is301() && saves.flick[301] !== null
         ? [g.doubleLabel, saves.flick[301]]
-        : saves[game].best !== null
+        : saves[game]?.best != null
           ? [g.oldLabel, saves[game].best]
           : [g.bestLabel, null];
   const modeButton = (mode, title) => {
     const s = match?.mode === mode && !status(match).complete && status(match);
-    const left = s && is301() ? " · " + byName(s.totals.length).map((i) => s.totals[i]).join("–") + (mode === "solo" ? " left" : "") + (doubleOut(match) ? " · double out" : "") : "";
+    const left = !s
+      ? ""
+      : is301()
+        ? " · " + byName(s.totals.length).map((i) => s.totals[i]).join("–") + (mode === "solo" ? " left" : "") + (doubleOut(match) ? " · double out" : "")
+        : view()
+          ? " · " + view().summary(s)
+          : " · Saved on this device";
     return `<button class="mode ${mode}" data-mode="${mode}">
       <span class="mode-mark">${icon(mode)}</span>
       <span class="mode-copy"><strong>${s ? "Resume " + title : title}</strong>
-      <small>${s ? "Round " + s.round + " of " + g.rounds + left + (is301() ? "" : " · Saved on this device") : g[mode]}</small></span>
+      <small>${s ? "Round " + s.round + " of " + g.rounds + left : g[mode]}</small></span>
       ${icon("arrow")}</button>`;
   };
   const pick = (id, name) =>
@@ -463,7 +647,7 @@ function lobbyParts() {
     plate: `<div class="plate best-plate"><span class="plate-label">${label}</span><b class="plate-score">${bestText(shown)}</b></div>`,
     panel: `<section class="lobby" aria-labelledby="lobby-title">
        <h1 id="lobby-title" class="sr">Dartshift · ${g.name}</h1>
-       <div class="games" role="group" aria-label="Game">${pick("rush", "Nine Dart Rush")}${pick("301", "301")}</div>
+       <div class="games" role="group" aria-label="Game">${gameOrder.map((id) => pick(id, games[id].name)).join("")}</div>
        <p class="tagline">${g.tagline}</p>
        <div class="modes">
          ${modeButton("solo", "Solo run")}
@@ -479,6 +663,10 @@ function home() {
   bindLobby();
 }
 function bindLobby() {
+  // The game row scrolls sideways: bring the chosen one into view (never the page).
+  const row = panel.querySelector(":scope > .lobby:not(.ghost) .games"),
+    on = row?.querySelector('[aria-pressed="true"]');
+  if (on) row.scrollLeft = on.offsetLeft - (row.clientWidth - on.offsetWidth) / 2;
   panel
     .querySelectorAll(".lobby [data-mode]")
     .forEach((b) => (b.onclick = () => selectMode(b.dataset.mode)));
@@ -521,7 +709,11 @@ function help() {
     "How to play",
     '<ol class="steps"><li><strong>Pick up the dart.</strong><small>Put your finger on the dart beneath the board.</small></li><li><strong>Flick it up.</strong><small>The faster the flick, the higher the dart lands. Lean the stroke left or right to aim. Start with a medium flick at the bull.</small></li><li><strong>Keep it clean.</strong><small>Swipe straight and let go while your finger is still moving. A curved, slowing or paused stroke scatters the dart.</small></li></ol><p class="body-copy">The thin inner ring triples the number. The outer ring doubles it. Bulls score 25 or 50.</p><p class="body-copy"><strong>Nine Dart Rush.</strong> Three darts per visit, three visits each. Highest total wins.</p><p class="body-copy"><strong>301.</strong> Count down from 301. The first to reach exactly zero wins, with any dart: a single, double, treble or bull. Going below zero is a bust: the visit ends and your score goes back. Empty dart slots suggest a checkout. With fewer than ' +
       x01.highlightBelow +
-      ' left, the board outlines the number that finishes; its darkened treble and double would bust. Ten rounds each; if nobody finishes, the lowest score wins. A match saved before this rule finishes under double out, as it began.</p><button class="primary full" id="okay">Got it</button>',
+      ' left, the board outlines the number that finishes; its darkened treble and double would bust. Ten rounds each; if nobody finishes, the lowest score wins. A match saved before this rule finishes under double out, as it began.</p><p class="body-copy"><strong>Cricket.</strong> The numbers 15 to 20 and the bull. A single is one mark, a double two, a treble three; the outer bull one and the bull two. Three marks close a number. Once you have closed one, more marks there score its value (25 on the bull) while your rival still has it open. Close all seven with at least as many points as your rival to win. Solo, there are no points: close all seven in the fewest darts. The rim badges ring your marks, a third per mark; a white dot means your rival has closed it, and numbers both have closed go dark. ' +
+      rules.cricket.rounds +
+      ' rounds each; then more points wins.</p><p class="body-copy"><strong>Around the Clock.</strong> Hit 1, then 2, and so on to 20, then either bull. Any bed of the number counts. The board lights the number you need. First to the bull wins; after ' +
+      rules.clock.rounds +
+      ' rounds each, whoever got furthest.</p><p class="body-copy"><strong>Shanghai.</strong> Seven rounds. In round 1 only 1s score, in round 2 only 2s, and so on: single, double or treble of that number. Highest total wins. Hitting the single, double and treble of the number in one visit is a Shanghai, and in a duel it wins on the spot.</p><button class="primary full" id="okay">Got it</button>',
     () => {
       $("#okay").onclick = () => $("#modal").close();
       $("#sheet-title").onclick = probeTap;
@@ -564,7 +756,7 @@ function start(mode, first = 0) {
   save();
   play();
   say(
-    (is301() ? "301, first to zero. " : "") +
+    (is301() ? "301, first to zero. " : view() ? games[game].name + ". " + games[game].tagline + " " : "") +
       (match.first ? "Player 2 throws first. " : "") +
       "Round one. Touch the dart and flick it up to throw. The faster the flick, the higher it lands. Keep the stroke straight.",
   );
@@ -579,7 +771,7 @@ function selectMode(mode) {
     sheet(
       "Switch modes?",
       '<p class="body-copy">Starting a new match will replace your saved ' +
-        (is301() ? "301 " : "") +
+        (game === "rush" ? "" : games[game].name + " ") +
         (match.mode === "solo" ? "solo run" : "duel") +
         '.</p><div class="stack"><button class="primary" id="switch">Start new match</button><button class="secondary" id="stay">Keep current match</button></div>',
       () => {
@@ -596,12 +788,19 @@ function selectMode(mode) {
 // The scoreboard is mounted on the wall, so it shares the room's light and camera.
 // In 301 the big number is what's left, and the empty slots show a checkout.
 function plate(s, shown, round, visit, closed, bust = null) {
-  const duel = match.mode === "duel";
-  const route = is301() && !closed ? checkout(s.totals[shown], 3 - visit.length, doubleOut(match)) : null;
+  const duel = match.mode === "duel",
+    look = view();
+  // The visit on the plate (for its gains), when it holds darts.
+  const v = visit.length ? s.visits.findLast((x) => x.hits[0] === visit[0]) : null;
+  const route = closed
+    ? null
+    : is301()
+      ? checkout(s.totals[shown], 3 - visit.length, doubleOut(match))
+      : look?.hints(s, shown, 3 - visit.length, visit, v);
   const slots = [0, 1, 2]
     .map((i) => {
       const h = visit[i];
-      if (h) return `<i class="slot thrown${bust ? " void" : ""}">${scoreAt(h.x, h.y).points}</i>`;
+      if (h) return `<i class="slot thrown${bust ? " void" : ""}">${look ? look.slot(h, v.gains[i]) : scoreAt(h.x, h.y).points}</i>`;
       const next = !closed && i === visit.length ? " next" : "";
       const out = route?.[i - visit.length];
       return out ? `<i class="slot out${next}">${out}</i>` : `<i class="slot${next}"></i>`;
@@ -611,24 +810,32 @@ function plate(s, shown, round, visit, closed, bust = null) {
     ? bust
       ? "Bust"
       : "Visit complete"
-    : "Dart " + s.dart + " of 3" + (route ? ". Checkout " + spoken(route) : "");
+    : "Dart " + s.dart + " of 3" +
+      (!route?.length
+        ? ""
+        : game === "clock"
+          ? ". Next " + route.join(", ").replace("Bull", "bull")
+          : (look ? ". For a Shanghai: " : ". Checkout ") + spoken(route));
+  const big = (i) => (look ? look.big(s, i) : s.totals[i]);
   return `<div class="plate${duel ? " " + seatClass(shown) : ""}">
-    <span class="plate-label who">${duel ? playerName(shown) : is301() ? "Remaining" : "Score"}</span>
-    <span class="plate-label side">${duel ? playerName(1 - shown) + " · " + s.totals[1 - shown] : doubleOut(match) ? "Double out" : "Best " + bestText()}</span>
-    <b class="plate-score">${s.totals[shown]}</b>
+    <span class="plate-label who">${duel ? playerName(shown) : is301() ? "Remaining" : look ? look.who : "Score"}</span>
+    <span class="plate-label side">${duel ? playerName(1 - shown) + " · " + big(1 - shown) : doubleOut(match) ? "Double out" : "Best " + bestText()}</span>
+    <b class="plate-score">${big(shown)}</b>
     <span class="visit"><span class="plate-label">Round ${round} / ${games[game].rounds}</span>
       <span class="slots" role="img" aria-label="${where}">${slots}</span></span>
   </div>`;
 }
 // Score pop at the impact point, on the board itself.
 // `note` is the 301 outcome of this dart: "bust" or "out" (game shot).
-function callout(hit, note = "") {
+// `look` is { top, name, tier } from a game's view (Cricket, Around the Clock, Shanghai).
+function callout(hit, note = "", look = null) {
   const p = boardPosition(hit),
     h = scoreAt(hit.x, hit.y);
-  const tier =
+  let tier =
     note === "bust" ? "miss bust" : h.points >= 40 || note === "out" ? "premium" : h.points ? "" : "miss";
-  const top = note === "bust" ? "<b>Bust</b>" : h.points ? "<b>+" + h.points + "</b>" : "";
-  const name = note === "out" ? "Game shot" : h.points === 50 ? "Bull" : h.label;
+  let top = note === "bust" ? "<b>Bust</b>" : h.points ? "<b>+" + h.points + "</b>" : "";
+  let name = note === "out" ? "Game shot" : h.points === 50 ? "Bull" : h.label;
+  if (look) ({ tier, name } = look), (top = look.top ? "<b>" + look.top + "</b>" : "");
   return `<div class="callout ${tier}" style="left:${((p.x + 211) / 4.22).toFixed(2)}%;top:${((p.y + 211) / 4.22).toFixed(2)}%" aria-hidden="true">${top}<span>${name}</span></div>`;
 }
 // Impact adds the new dart to the board already on screen instead of rebuilding
@@ -648,16 +855,17 @@ function embed(hit, earlier, impactClass) {
 }
 // The frame after: the callout joins the board that holds the new dart, and the
 // finishing highlight follows the scoreboard (only if it changed).
-function landing(hits, impactClass, note, target = null) {
+// `mark` is the board's overlay (overlay()), or null.
+function landing(hits, impactClass, note, mark = null, look = null) {
   const wrap = impactClass && embedded?.isConnected ? embedded : null;
   embedded = null;
   if (!wrap) return null;
   wrap.querySelector(".callout")?.remove();
-  wrap.insertAdjacentHTML("beforeend", callout(hits.at(-1), note));
-  const mark = wrap.querySelector(".finish");
-  if (mark.dataset.bed !== (target ?? "")) {
-    mark.dataset.bed = target ?? "";
-    mark.innerHTML = finishMark(target);
+  wrap.insertAdjacentHTML("beforeend", callout(hits.at(-1), note, look));
+  const layer = wrap.querySelector(".finish");
+  if (layer.dataset.bed !== (mark?.key ?? "")) {
+    layer.dataset.bed = mark?.key ?? "";
+    layer.innerHTML = mark?.svg ?? "";
   }
   return wrap;
 }
@@ -689,39 +897,47 @@ function play(impactClass = "", leaving = false) {
   const round = between ? last.round : s.round;
   // After a handoff the last visit's darts stay just long enough to be pulled.
   const onBoard = leaving ? last.hits : visit;
-  const note = noteOf(last);
+  const note = noteOf(last, s),
+    look = view();
   let card = "",
     total = 0;
   if (between) {
     total = last.scored;
     const bust = last.bust;
-    const tier = bust ? " flat bust" : total >= 100 ? " big" : total ? "" : " flat";
+    const head = look?.heading(last, s);
+    const tier = bust ? " flat bust" : total >= 100 || last.shanghai ? " big" : total ? "" : " flat";
     const heading = bust
       ? `<span class="visit-total">Bust</span><span class="caller">${bustReasons[bust]} · back to ${last.start}</span>`
-      : `<span class="visit-total">${total}</span><span class="caller">${caller(total)}</span>`;
+      : head
+        ? `<span class="visit-total">${head.total}</span><span class="caller">${head.caller}</span>`
+        : `<span class="visit-total">${total}</span><span class="caller">${caller(total)}</span>`;
     const mine = is301()
       ? `<span>Left · ${s.totals[0]}</span><span>Darts · ${n}</span>`
-      : `<span>Total · ${s.totals[0]}</span><span>Best · ${bestText()}</span>`;
+      : look
+        ? look.mine(s, n).map((t) => `<span>${t}</span>`).join("")
+        : `<span>Total · ${s.totals[0]}</span><span>Best · ${bestText()}</span>`;
     card = `<section class="card handoff${tier}${duel ? " " + seatClass(s.player) : ""}" aria-labelledby="visit-title">
       <p class="eyelabel">${duel ? playerName(shown) + " · " : ""}Visit complete</p>
       <h2 id="visit-title">${heading}</h2>
-      <p class="standings">${duel ? byName(2).map((i) => `<span class="${seatClass(i)}">${playerName(i)} · ${s.totals[i]}</span>`).join("") : mine}</p>
+      <p class="standings">${duel ? byName(2).map((i) => `<span class="${seatClass(i)}">${playerName(i)} · ${look ? look.big(s, i) : s.totals[i]}</span>`).join("") : mine}</p>
       ${tip ? `<p class="tip">${tip}</p>` : ""}
       <button class="primary big" id="next">${duel ? "Pass to " + playerName(s.player) : "Start round " + s.round}${icon("arrow")}</button>
     </section>`;
   }
-  // The finishing bed on the board: the first slot of the plate's route.
-  const target = finishTarget(match, acknowledged);
-  const keep = landing(onBoard, impactClass, note, target);
+  // The board's overlay: 301's finishing bed (the first slot of the plate's
+  // route), or the other games' targets.
+  const mark = overlay();
+  const said = look && impactClass && last ? look.callout(last.hits.at(-1), last.gains.at(-1), last, s, last.player) : null;
+  const keep = landing(onBoard, impactClass, note, mark, said);
   const world = `<div class="field gameplay">
        ${plate(s, shown, round, visit, between, between && last.bust)}
-       <div class="board-wrap">${keep ? "" : board(onBoard, impactClass, target) + (impactClass && visit.length ? callout(visit.at(-1), note) : "")}</div>
+       <div class="board-wrap">${keep ? "" : board(onBoard, impactClass, mark) + (impactClass && visit.length ? callout(visit.at(-1), note, said) : "")}</div>
        ${between ? "" : throwControl}
      </div>`;
   if (between) {
     const step = () => {
       render("step", world, card, keep);
-      if (total >= 100 && impactClass) moment("ton");
+      if ((total >= 100 || last.shanghai) && impactClass) moment("ton");
       bindTurnButton($("#next"), () => {
         acknowledged = n;
         save();
@@ -731,7 +947,7 @@ function play(impactClass = "", leaving = false) {
             s.round +
             ", " +
             (duel ? playerName(s.player) : "your turn") +
-            (is301() ? ". " + standing(s.totals[s.player]) : ""),
+            (is301() ? ". " + standing(s.totals[s.player]) : look ? ". " + look.aim(s, s.player) : ""),
         );
       });
     };
@@ -777,13 +993,22 @@ function land(point, held, geo, stroke) {
   match = advance(match, point);
   const s = status(match),
     v = s.visits.at(-1),
-    note = noteOf(v),
+    note = noteOf(v, s),
     darts = match.hits.length,
-    learning = !!stroke && saves.learn < learnDarts;
+    learning = !!stroke && saves.learn < learnDarts,
+    look = view(),
+    gain = v.gains?.at(-1) ?? hit.points;
   tip = coach(stroke, point, learning);
   if (learning) saves.learn++;
   if (s.complete && match.mode === "solo" && !carried()) {
-    if (!is301()) {
+    const value = look?.record(s, darts);
+    if (look) {
+      if (value !== null) {
+        const fewer = rules[game].record.fewer;
+        freshBest = best === null || (fewer ? value < best : value > best);
+        best = best === null ? value : fewer ? Math.min(best, value) : Math.max(best, value);
+      }
+    } else if (!is301()) {
       freshBest = best === null || s.totals[0] > best;
       best = Math.max(best ?? 0, s.totals[0]);
     } else if (s.out) {
@@ -796,7 +1021,8 @@ function land(point, held, geo, stroke) {
   field.setAttribute("aria-busy", "true");
   let sounded = false;
   function contact() {
-    if (!sounded && !muted) impact(note === "bust" ? 0 : hit.points);
+    // A dart that counts for nothing in these games lands with the miss's thud.
+    if (!sounded && !muted) impact(note === "bust" || (look && !gain) ? 0 : look ? Math.max(hit.points, 1) : hit.points);
     sounded = true;
   }
   const flight = flyDart(field, point, held, geo, contact, s.complete);
@@ -809,7 +1035,7 @@ function land(point, held, geo, stroke) {
     cancelAim = () => {};
     flight?.cancel();
     contact();
-    const big = hit.points >= 40 || note === "out";
+    const big = look ? !!note || look.callout(point, gain, v, s, v.player).tier === "premium" : hit.points >= 40 || note === "out";
     const effect = big ? "impact premium" : "impact";
     embedded = embed(match.hits.at(-1), v.hits.length - 1, effect);
     for (const a of field.querySelector(".throw-control")?.getAnimations() || []) {
@@ -817,7 +1043,9 @@ function land(point, held, geo, stroke) {
       a.currentTime = 0;
     }
     say(
-      (!is301()
+      (look
+        ? look.speak(hit, gain, v, s, v.player) + (s.complete ? " " + verdict(s) + "." : "")
+        : !is301()
         ? hit.label + ", " + hit.points + " points." + (s.complete ? " Match complete." : "")
         : note === "bust"
           ? `${hit.label}. Bust, ${bustReasons[v.bust].toLowerCase()}. Back to ${v.start}.`
@@ -843,7 +1071,8 @@ function land(point, held, geo, stroke) {
 }
 // The 301 result in words: the results title and the final announcement.
 function verdict(s) {
-  if (match.mode === "solo") return s.out ? "Checked out" : "Out of rounds";
+  if (match.mode === "solo")
+    return view() ? (s.out || game === "shanghai" ? view().done : "Out of rounds") : s.out ? "Checked out" : "Out of rounds";
   return s.winner === null ? "Match drawn" : playerName(s.winner) + " wins";
 }
 function finish(impactClass = "") {
@@ -852,11 +1081,33 @@ function finish(impactClass = "") {
     duel = match.mode === "duel";
   const end = s.visits.at(-1),
     visit = end.hits,
-    note = noteOf(end);
+    note = noteOf(end, s),
+    look = view();
   const last = match.hits.at(-1),
     hit = scoreAt(last.x, last.y);
   let title, score, line, table;
-  if (!is301()) {
+  if (look) {
+    title = verdict(s);
+    const darts = match.hits.length;
+    const [unit, shown] = look.score(s, darts, duel);
+    score = `${byName(shown.length).map((i) => `<span class="${duel ? seatClass(i) : ""}">${shown[i]}</span>`).join("<i>–</i>")}<small>${unit}</small>`;
+    const shanghai = s.visits.find((v) => v.shanghai);
+    line = duel
+      ? s.out
+        ? game === "shanghai"
+          ? "Shanghai in round " + end.round
+          : look.done + " · " + hit.label
+        : rules[game].rounds + " rounds up · " + (s.winner === null ? "level" : look.limit)
+      : look.record(s, darts) === null
+        ? look.toRecord
+        : freshBest
+          ? "New personal best"
+          : "Personal best · " + bestText() + (shanghai ? " · Shanghai in round " + shanghai.round : "");
+    const head = duel ? `<thead><tr><th></th>${byName(2).map((i) => "<th>" + playerName(i) + "</th>").join("")}</tr></thead>` : "";
+    const row = ([name, cell]) =>
+      "<tr><td>" + name + "</td>" + byName(totals.length).map((p) => "<td>" + cell(s, p, s.visits.filter((v) => v.player === p)) + "</td>").join("") + "</tr>";
+    table = `${head}<tbody>${look.rows.map(row).join("")}</tbody>`;
+  } else if (!is301()) {
     title = duel
       ? totals[0] === totals[1]
         ? "Match drawn"
@@ -917,11 +1168,12 @@ function finish(impactClass = "") {
     const head = duel ? `<thead><tr><th></th>${byName(2).map((i) => "<th>" + playerName(i) + "</th>").join("")}</tr></thead>` : "";
     table = `${head}<tbody>${row("Darts", "darts")}${row("3-dart average", "average")}${row("Best visit", "top")}</tbody>`;
   }
-  const keep = landing(visit, impactClass, note);
+  const said = look && impactClass ? look.callout(last, end.gains.at(-1), end, s, end.player) : null;
+  const keep = landing(visit, impactClass, note, null, said);
   const world = `<div class="field">${plate(s, end.player, end.round, visit, true, end.bust)}
-       <div class="board-wrap">${keep ? "" : board(visit, impactClass) + (impactClass ? callout(last, note) : "")}</div></div>`;
+       <div class="board-wrap">${keep ? "" : board(visit, impactClass) + (impactClass ? callout(last, note, said) : "")}</div></div>`;
   const results = `<section class="card results${freshBest && !duel ? " record" : ""}" aria-labelledby="result-title">
-      <p class="eyelabel">${is301() ? (doubleOut(match) ? "301 · double out · " : "301 · ") : ""}${duel ? "Local duel" : "Solo run"}</p>
+      <p class="eyelabel">${is301() ? (doubleOut(match) ? "301 · double out · " : "301 · ") : look ? games[game].name + " · " : ""}${duel ? "Local duel" : "Solo run"}</p>
       <h1 id="result-title">${title}</h1>
       <div class="result-score">${score}</div>
       <p class="note">${line}</p>
@@ -975,7 +1227,8 @@ addEventListener("pageshow", () => refresh());
 // An update reload returns straight to the match it interrupted.
 let resuming = null;
 try {
-  resuming = { 1: "rush", 301: "301" }[sessionStorage.getItem(resumeKey)];
+  const key = sessionStorage.getItem(resumeKey);
+  resuming = key === "1" ? "rush" : games[key] && key !== "rush" ? key : null;
   sessionStorage.removeItem(resumeKey);
 } catch {
   /* Lobby. */
@@ -1012,7 +1265,7 @@ if ("serviceWorker" in navigator) {
           try {
             sessionStorage.setItem(updatedKey, "1");
             if (["oche", "step"].includes(scene.dataset.shot))
-              sessionStorage.setItem(resumeKey, is301() ? "301" : "1");
+              sessionStorage.setItem(resumeKey, game === "rush" ? "1" : game);
           } catch {
             /* Reload lands in the lobby instead. */
           }
