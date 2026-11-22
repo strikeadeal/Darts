@@ -277,7 +277,7 @@ test("the learn count has its own key and leaves the other three as they were", 
   const s = readSaves(JSON.parse(JSON.stringify(v1)), null, { rush: 300, 301: 9, carried: [] }, 12);
   assert.equal(s.learn, 12);
   const out = JSON.parse(JSON.stringify(writeSaves(s)));
-  assert.deepEqual(Object.keys(out), [saveKeys.rush, saveKeys.x01, saveKeys.flick, saveKeys.learn, saveKeys.zero]);
+  assert.deepEqual(Object.keys(out), [saveKeys.rush, saveKeys.x01, saveKeys.flick, saveKeys.learn, saveKeys.zero, saveKeys.modes]);
   assert.equal(out[saveKeys.learn], 12);
   assert.deepEqual(Object.keys(out[saveKeys.rush]), ["match", "best", "muted", "acknowledged"]);
   assert.deepEqual(Object.keys(out[saveKeys.flick]).sort(), ["301", "carried", "rush"]);

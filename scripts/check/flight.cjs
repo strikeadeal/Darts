@@ -2,6 +2,7 @@
 // node scripts/check/flight.cjs <chromium|webkit> <built dir> [label]
 // env: VW VH DPR THROWS STROKES=ms,ms,ms CDP=<rate> QUOTA=<% of one core via cgroup v1, root> CSS=<override> MUTED=1 DETAIL=1 OUT=<jsonl>
 //      TRACE=<file> (chromium) REDUCED=1
+//      GAME=<cricket|clock|shanghai>: throw in that game's solo
 //      SEED=<left>: throw in a 301 solo resumed on `left` (first to zero in dartshift.301.v2; with LEGACY=1,
 //      a double-out save in 301.v1, which a build from before first to zero also plays, without a highlight)
 const pw = require(process.env.PLAYWRIGHT_MODULE || "playwright");
@@ -118,6 +119,8 @@ const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length % 2
     }, [+env.SEED, !!env.LEGACY]);
     await page.reload();
   }
+  // GAME=<cricket|clock|shanghai>: throw in that game's solo instead.
+  if (env.GAME) { await page.$eval(`[data-game='${env.GAME}']`, (b) => b.click()); await sleep(200); }
   await page.click("[data-mode=solo]");
   const settled = () => page.waitForFunction(() => document.getAnimations().filter((a) => a.playState === "running").length === 0 && !document.querySelector(".field[aria-busy]"), null, { timeout: 15000 });
   await settled();

@@ -1,4 +1,4 @@
-import { sectors, radii } from "./game.js";
+import { sectors, radii, cricketTargets } from "./game.js";
 import { boardPosition, entryPose, tune } from "./throw.js";
 const paths = {
   wing: '<path fill="currentColor" stroke="none" d="M1 5 25 3l-2.5 5H7zm7 5h14l-2 4h-7zm6 6h5l-2 4z"/>',
@@ -249,17 +249,60 @@ export function finishMark(label) {
     const [x, y] = polar(sectors.indexOf(number) * 18, 185);
     badge = `<circle class="finish-badge" cx="${x}" cy="${y}" r="16"/><text x="${x}" y="${y + 6.5}">${number}</text>`;
   }
-  return `<g transform="matrix(1 0 ${tune.camera.skew} ${tune.camera.faceHeight} 0 0)">${no ? `<path class="finish-bust" fill-rule="evenodd" d="${no}"/>` : ""}<path class="finish-edge" fill-rule="evenodd" d="${d}"/><path class="finish-line" fill-rule="evenodd" d="${d}"/>${badge}</g>`;
+  return `<g class="enter" transform="${plane}">${no ? `<path class="finish-bust" fill-rule="evenodd" d="${no}"/>` : ""}<path class="finish-edge" fill-rule="evenodd" d="${d}"/><path class="finish-line" fill-rule="evenodd" d="${d}"/>${badge}</g>`;
+}
+const plane = `matrix(1 0 ${tune.camera.skew} ${tune.camera.faceHeight} 0 0)`;
+
+// Cricket, Around the Clock and Shanghai (src/game.js boardTargets), in the same
+// layer and style as 301's finish: each number to aim at is outlined over all its
+// beds (the bull: both bulls), with its rim number badged. Cricket badges all
+// seven targets and rings each with the thrower's marks (a third of a ring per
+// mark, so it doesn't rely on colour), the bull's ring round the bull itself,
+// puts a dot on those only the rival has closed, and darkens those everyone has.
+// All the beds of a number, from the outer bull to the edge (the bull: both bulls),
+// as { a, b, inner, outer } like finishBeds.
+export const wedge = (n) => {
+  if (n === 25) return { a: 0, b: 360, inner: 0, outer: radii.outerBull };
+  const a = sectors.indexOf(n) * 18 - 9;
+  return { a, b: a + 18, inner: radii.outerBull, outer: radii.edge };
+};
+const ticks = (x, y, r, marks) =>
+  [0, 1, 2]
+    .map((i) => {
+      const [x0, y0] = polar(i * 120 + 8, r),
+        [x1, y1] = polar(i * 120 + 112, r);
+      return `<path class="tick${i < marks ? " on" : ""}" d="M${x + x0} ${y + y0}A${r} ${r} 0 0 1 ${x + x1} ${y + y1}"/>`;
+    })
+    .join("");
+// A small white dot: the rival has closed this cricket target and scores on it.
+const pip = (t, n, x, y) => (t.rival?.includes(n) ? `<circle class="rival" cx="${x}" cy="${y}" r="5"/>` : "");
+export function targetMark(t) {
+  if (!t) return "";
+  const dead = t.dead || [],
+    aim = t.aim.map((n) => shape(wedge(n))).join(""),
+    dark = dead.map((n) => shape(wedge(n))).join("");
+  const cricket = !!t.marks;
+  const badges = (cricket ? cricketTargets : t.aim)
+    .filter((n) => n !== 25)
+    .map((n) => {
+      const state = !cricket ? "" : dead.includes(n) ? " dead" : t.marks[n] === 3 ? "" : " open";
+      const [x, y] = polar(sectors.indexOf(n) * 18, cricket ? 188 : 185);
+      return `<g class="badge${state}"><circle class="finish-badge" cx="${x}" cy="${y}" r="${cricket ? 13.5 : 16}"/><text x="${x}" y="${y + (cricket ? 5.5 : 6.5)}">${n}</text>${cricket ? ticks(x, y, 17.5, t.marks[n]) + pip(t, n, x + 13, y - 13) : ""}</g>`;
+    })
+    .join("");
+  const bull = cricket ? `<g class="badge">${ticks(0, 0, 21, t.marks[25])}${pip(t, 25, 21, -21)}</g>` : "";
+  return `<g${cricket ? "" : ' class="enter"'} transform="${plane}">${dark ? `<path class="finish-bust" d="${dark}"/>` : ""}${aim ? `<path class="finish-edge" d="${aim}"/><path class="finish-line" d="${aim}"/>` : ""}${badges}${bull}</g>`;
 }
 
-// `target` is the finishing highlight's label (src/game.js finishTarget), or null.
-export function board(hits, impactClass = "", target = null) {
+// `mark` is the overlay on the board, { key, svg }: 301's finish (finishMark) or
+// the other games' targets (targetMark), or null. The key goes in data-bed.
+export function board(hits, impactClass = "", mark = null) {
   const darts = hits
     .map((hit, i) => landed(hit, i === hits.length - 1 ? impactClass : ""))
     .join("");
   return `<svg class="board" viewBox="-211 -211 422 422" role="img" aria-label="Dartboard, twenty at the top">
     <g class="board-plane" transform="matrix(1 0 ${tune.camera.skew} ${tune.camera.faceHeight} 0 0)">${face}</g></svg>
-    <svg class="finish" viewBox="-211 -211 422 422" aria-hidden="true" data-bed="${target ?? ""}">${finishMark(target)}</svg>
+    <svg class="finish" viewBox="-211 -211 422 422" aria-hidden="true" data-bed="${(mark?.key ?? "").replaceAll('"', "&quot;")}">${mark?.svg ?? ""}</svg>
     <svg class="approach" viewBox="-100 -100 200 200" aria-hidden="true"></svg>
     <svg class="board-objects" viewBox="-211 -211 422 422" aria-hidden="true">${darts}
     <g id="sight" visibility="hidden" fill="none" stroke-width="2"><circle r="10" stroke="#151515" stroke-width="5"/><circle r="10" stroke="#fff"/><circle r="2" fill="#ff5732"/></g>
