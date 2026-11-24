@@ -1,16 +1,15 @@
+/* Archivo for everything you read, expanded for numbers and headings; Martian
+   Mono only for measurements. Both are variable fonts subset to Latin. */
 @font-face {
-  font-family: Anton;
-  src: url(./assets/fonts/Anton-Regular.ttf);
+  font-family: Archivo;
+  src: url(./assets/fonts/Archivo.woff2) format("woff2");
+  font-weight: 400 800;
+  font-stretch: 100% 125%;
 }
 @font-face {
-  font-family: Barlow;
-  src: url(./assets/fonts/Barlow-Regular.ttf);
-}
-@font-face {
-  font-family: Race;
-  src: url(./assets/fonts/BarlowCondensed-ExtraBoldItalic.ttf);
-  font-style: italic;
-  font-weight: 800;
+  font-family: "Martian Mono";
+  src: url(./assets/fonts/MartianMono.woff2) format("woff2");
+  font-weight: 400 600;
 }
 
 /* ───────────────────────── Scene tuning ─────────────────────────
@@ -38,13 +37,12 @@
   --floor-drop: 0.62; /* b · wall base below the bull (stylised; a real board hangs higher) */
   --floor-depth: 2.1; /* b · floor modelled out from the wall; keep below --lens */
   --oche-at: 1.6; /* b · throw line distance from the wall */
-  --surround: 1.24; /* b · catch-ring diameter */
   /* Light. One warm lamp, up and to the left, matching the shading baked
      into the board face and the dart shadows in src/art.js. */
   --lamp: 1; /* 0–1 · lamp strength */
   --lamp-x: -0.32; /* b · centre of the lamp pool on the wall */
   --lamp-y: -0.62;
-  --vignette: 0.75; /* 0–1 · lens darkening at the edges */
+  --vignette: 0.6; /* 0–1 · lens darkening at the edges */
   --shade: 4px 9px; /* drop-shadow offset for things on the wall */
   /* Timing */
   --cam-in: 560ms; /* dolly in to the oche */
@@ -71,12 +69,14 @@
   }
 }
 
-/* Short portrait phones (SE): pull further back so the results card fits, and
-   lift the lobby board clear of the game switch and mode buttons. */
+/* Short portrait phones (SE): pull further back so the visit and results cards
+   fit, and lift the lobby board clear of the game switch and mode buttons. */
 @media (max-height: 700px) and (orientation: portrait) {
   :root {
     --wide-y: -0.05;
     --wide-z: 2.2;
+    --step-y: -0.14; /* the between-visits card is taller than the plate */
+    --step-z: 1.2;
     --final-y: -0.72;
     --final-z: 4;
   }
@@ -85,17 +85,22 @@
 /* ───────────────────────── Layout ───────────────────────── */
 :root {
   color-scheme: dark;
-  --ink: #101110;
-  --night: #0b0c0a;
-  --cream: #f5eedc;
-  --muted: #b3b3a9;
-  --hot: #ff5732;
-  --blue: #70b1df;
-  --race: 800 italic 1em Race, "Arial Narrow", sans-serif;
-  --mono:
-    600 11px/1.3 ui-monospace,
-    "SFMono-Regular",
-    monospace;
+  /* Tungsten's layout in The Local's colours. Gold leaf marks what you can
+     press, and Player 1; chalk blue is Player 2. */
+  --field: #1a3329; /* bottle green */
+  --slate: linear-gradient(#2c3231, #232827);
+  --brass: #8a7343; /* the hairline round every plate */
+  --mahogany: #4a2417;
+  --chalk: #eae6da;
+  --muted: #a4a89e;
+  --rule: #3e4543;
+  --gold: #d4af5a;
+  --blue: #9ccbe3;
+  --ink: #1c201f; /* text on gold or blue */
+  --halo: #141817; /* the dark edge under gold and chalk on the board */
+  --display: 800 expanded 1em Archivo, sans-serif;
+  --mono: 500 11px/1.3 "Martian Mono", ui-monospace, monospace;
+  --dart: var(--gold); /* the thrower's shaft and flight stripe */
   --top: env(safe-area-inset-top, 0px);
   --bottom: env(safe-area-inset-bottom, 0px);
   --left: env(safe-area-inset-left, 0px);
@@ -157,10 +162,10 @@ body {
 }
 body {
   margin: 0;
-  background: var(--night);
-  color: var(--cream);
+  background: var(--field);
+  color: var(--chalk);
   font:
-    16px/1.45 Barlow,
+    16px/1.45 Archivo,
     -apple-system,
     sans-serif;
 }
@@ -173,7 +178,7 @@ button {
   touch-action: manipulation;
 }
 button:focus-visible {
-  outline: 3px solid #ffc36a;
+  outline: 3px solid var(--chalk);
   outline-offset: 3px;
 }
 .icon {
@@ -199,10 +204,7 @@ p {
 }
 .eyelabel,
 .plate-label {
-  font: var(--mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
+  font: 600 12px/1.3 Archivo, sans-serif;
   color: var(--muted);
 }
 
@@ -215,7 +217,7 @@ p {
      a scroll container could be scrolled out from under the camera. */
   overflow: hidden;
   overflow: clip;
-  background: var(--night);
+  background: var(--field);
   perspective: calc(var(--b) * var(--lens));
   perspective-origin: var(--cx) var(--cy);
 }
@@ -265,96 +267,47 @@ p {
   height: calc(var(--b) * 2.7);
   background: radial-gradient(
     closest-side,
-    #4b4a3d,
-    #33352b 32%,
-    #1d2019 64%,
-    #1d201900
+    #2f5949,
+    #27493c 32%,
+    #1f3c31 64%,
+    #1f3c3100
   );
   opacity: var(--lamp);
   animation: lamp-on 900ms ease-out both;
 }
 .flare {
-  background: radial-gradient(closest-side, #fff1d0b0, #ffd29a33 45%, #ffd29a00);
+  background: radial-gradient(closest-side, #f6e7bd66, #f6e7bd1f 45%, #f6e7bd00);
   opacity: 0;
   animation: none;
 }
-.panels {
-  left: calc(var(--cx) - var(--b) * 1.45);
-  top: calc(var(--cy) - var(--b) * 1.9);
-  width: calc(var(--b) * 2.9);
-  height: calc(var(--b) * (1.9 + var(--floor-drop)));
-  background: repeating-linear-gradient(
-    90deg,
-    #0000 0 calc(var(--b) * 0.3 - 2px),
-    #00000070 0 calc(var(--b) * 0.3 - 1px),
-    #ffffff12 0 calc(var(--b) * 0.3)
-  );
-  -webkit-mask-image: radial-gradient(closest-side at 44% 52%, #000 25%, #0000);
-  mask-image: radial-gradient(closest-side at 44% 52%, #000 25%, #0000);
-  opacity: var(--lamp);
-}
-.surround {
-  width: calc(var(--b) * var(--surround));
-  aspect-ratio: 1;
-  left: calc(var(--cx) - var(--b) * var(--surround) / 2);
-  top: calc(var(--cy) - var(--b) * var(--surround) / 2);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 34% 28%, #2a2b28, #151615 46%, #0c0d0c 70%),
-    #111;
-  box-shadow:
-    inset 2px 3px 0 #ffffff14,
-    inset -3px -5px 10px #000a,
-    var(--shade) 14px #000c;
-}
-.skirting {
-  left: calc(var(--cx) - var(--b) * 1.6);
-  width: calc(var(--b) * 3.2);
-  top: calc(var(--cy) + var(--b) * (var(--floor-drop) - 0.045));
-  height: calc(var(--b) * 0.045);
-  background: linear-gradient(#57584c, #23251f 30%, #121410);
-  -webkit-mask-image: linear-gradient(90deg, #0000, #000 30% 60%, #0000);
-  mask-image: linear-gradient(90deg, #0000, #000 30% 60%, #0000);
-}
+/* The sign over the board names the game: a measured caption over the name. */
 .neon {
   left: calc(var(--cx) - var(--b));
   width: calc(var(--b) * 2);
   bottom: calc(100% + 8px); /* above the frame in the play shot */
   display: grid;
   justify-items: center;
-  font: calc(var(--b) * 0.12) / 0.98 Anton, Impact, sans-serif;
-  letter-spacing: 0.02em;
-  color: #fff6e8;
-  text-shadow:
-    0 0 calc(var(--b) * 0.006) #fff,
-    0 0 calc(var(--b) * 0.03) #ffcf9e,
-    0 0 calc(var(--b) * 0.09) #ff5732aa;
-  transform: skew(-9deg);
+  row-gap: calc(var(--b) * 0.025);
+  color: var(--chalk);
   transition: opacity 0.3s;
 }
 .neon > * {
-  animation: neon-on 1.1s steps(1) both;
+  animation: sign-on 0.6s ease-out both;
+}
+.neon span {
+  font: 500 calc(var(--b) * 0.042) / 1 "Martian Mono", monospace;
+  letter-spacing: 0.14em;
+  color: var(--muted);
 }
 /* The sign belongs to the wide shots; up at the oche it is out of frame. */
 .scene:is([data-shot="oche"], [data-shot="step"]) .neon {
   opacity: 0;
 }
 .neon b {
-  font-weight: normal;
-  font-size: 1.32em;
-  color: #ffe4dc;
-  text-shadow:
-    0 0 calc(var(--b) * 0.006) #fff,
-    0 0 calc(var(--b) * 0.03) #ff5732,
-    0 0 calc(var(--b) * 0.1) #ff3c14;
-}
-.neon svg {
-  width: calc(var(--b) * 0.13);
-  margin-bottom: calc(var(--b) * 0.025);
-  fill: none;
-  stroke: #ffd7c8;
-  stroke-width: 1.1;
-  filter: drop-shadow(0 0 calc(var(--b) * 0.02) #ff5732);
+  font: var(--display);
+  font-size: calc(var(--b) * 0.13);
+  line-height: 1;
+  letter-spacing: 0.01em;
 }
 .floorfx {
   transform-style: preserve-3d;
@@ -368,14 +321,8 @@ p {
   transform-origin: 50% 0;
   transform: rotateX(90deg);
   background:
-    radial-gradient(70% 45% at 44% 0, #ffe2b42e, #ffe2b400),
-    repeating-linear-gradient(
-      90deg,
-      #221e17 0 calc(var(--b) * 0.17),
-      #0d0c09 0 calc(var(--b) * 0.175),
-      #1b1812 0 calc(var(--b) * 0.345),
-      #0d0c09 0 calc(var(--b) * 0.35)
-    );
+    radial-gradient(70% 45% at 44% 0, #f6e7bd17, #f6e7bd00),
+    linear-gradient(#152c22, #10231b);
   -webkit-mask-image: radial-gradient(farthest-side at 50% 0, #000 45%, #0000);
   mask-image: radial-gradient(farthest-side at 50% 0, #000 45%, #0000);
 }
@@ -383,22 +330,12 @@ p {
   position: absolute;
   left: 50%;
 }
-.mat {
-  top: 0;
-  width: calc(var(--b) * 0.62);
-  margin-left: calc(var(--b) * -0.31);
-  height: calc(var(--b) * (var(--oche-at) + 0.12));
-  background:
-    linear-gradient(90deg, #12895999 0 1.2%, #0000 1.2% 98.8%, #12895999 98.8%),
-    linear-gradient(#141614, #0e100e);
-  opacity: 0.9;
-}
 .oche {
   top: calc(var(--b) * var(--oche-at));
   width: calc(var(--b) * 0.86);
   margin-left: calc(var(--b) * -0.43);
-  height: calc(var(--b) * 0.05);
-  background: linear-gradient(#fff8e6, #d9cfb4 55%, #8c8370);
+  height: calc(var(--b) * 0.022);
+  background: linear-gradient(#f0d48a, var(--gold) 55%, var(--brass));
 }
 .vignette {
   position: absolute;
@@ -418,7 +355,7 @@ p {
   animation: flare 1100ms ease-out;
 }
 .scene.moment-win .neon > * {
-  animation: neon-on 1.1s steps(1) both;
+  animation: sign-on 0.6s ease-out both;
 }
 @keyframes lamp-on {
   from {
@@ -436,17 +373,10 @@ p {
     opacity: 0;
   }
 }
-@keyframes neon-on {
-  0%,
-  12%,
-  30% {
-    opacity: 0.15;
-  }
-  8%,
-  22%,
-  40%,
-  100% {
-    opacity: 1;
+@keyframes sign-on {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--b) * 0.02);
   }
 }
 
@@ -491,9 +421,7 @@ p {
   display: block;
   width: 100%;
   height: 100%;
-  font:
-    700 20px/1 system-ui,
-    sans-serif;
+  font: 700 20px/1 Archivo, sans-serif;
 }
 /* 301's finishing highlight (src/art.js finishMark), over the board and under
    the darts. Information only: it never takes a touch. It changes only after a
@@ -506,9 +434,7 @@ p {
   height: 100%;
   overflow: visible;
   pointer-events: none;
-  font:
-    700 20px/1 system-ui,
-    sans-serif;
+  font: 700 20px/1 Archivo, sans-serif;
   text-anchor: middle;
 }
 .finish > .enter {
@@ -520,45 +446,45 @@ p {
   }
 }
 .finish-edge {
-  fill: #ffc36a40;
-  stroke: #0b0c0a;
-  stroke-width: 6;
+  fill: #d4af5a5c;
+  stroke: var(--halo);
+  stroke-width: 7;
   stroke-opacity: 0.85;
   stroke-linejoin: round;
 }
 .finish-line {
   fill: none;
-  stroke: #ffc36a;
-  stroke-width: 2.6;
+  stroke: #e2c06c;
+  stroke-width: 3;
   stroke-linejoin: round;
 }
 /* The same number's treble and double score too much: darkened. */
 .finish-bust {
-  fill: #0b0c0a;
+  fill: var(--halo);
   fill-opacity: 0.62;
 }
 .finish-badge {
-  fill: #ffc36a;
-  stroke: #0b0c0a;
+  fill: var(--gold);
+  stroke: var(--halo);
   stroke-width: 2.5;
 }
 .finish text {
-  fill: #101110;
+  fill: var(--ink);
 }
 /* Cricket: a target still open for the thrower is a dark badge; one everyone
    has closed is grey. Each mark is a third of the ring round the badge. */
 .badge.open .finish-badge {
-  fill: #0b0c0a;
-  stroke: #ffc36a;
+  fill: var(--halo);
+  stroke: var(--gold);
 }
 .badge.open text {
-  fill: var(--cream);
+  fill: var(--chalk);
 }
 .badge.dead .finish-badge {
-  fill: #6b6b63;
+  fill: #5d625c;
 }
 .badge.dead text {
-  fill: #1c1d1a;
+  fill: var(--ink);
 }
 .badge text {
   font-size: 16px;
@@ -569,18 +495,18 @@ p {
 }
 .tick {
   fill: none;
-  stroke: var(--cream);
+  stroke: var(--chalk);
   stroke-opacity: 0.35;
   stroke-width: 4;
   stroke-linecap: round;
 }
 .finish .rival {
-  fill: var(--cream);
-  stroke: #0b0c0a;
+  fill: var(--chalk);
+  stroke: var(--halo);
   stroke-width: 2;
 }
 .tick.on {
-  stroke: #ffc36a;
+  stroke: var(--gold);
   stroke-opacity: 1;
 }
 /* The approach shadow: 200 board units about the impact, moved by the flight. */
@@ -600,6 +526,58 @@ p {
   overflow: visible;
   pointer-events: none;
 }
+/* The lobby's drawing of the board (src/art.js gauge), in board units. */
+.gauge,
+.plot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.gauge path {
+  fill: none;
+  stroke: var(--chalk);
+  stroke-opacity: 0.75;
+  stroke-width: 2;
+}
+.gauge .tip {
+  fill: var(--chalk);
+  stroke: none;
+}
+.gauge text {
+  font: 500 19px/1 "Martian Mono", monospace;
+  fill: var(--chalk);
+}
+.gauge .name {
+  font: 600 21px/1 Archivo, sans-serif;
+}
+/* The results: every dart of the match over the board, dimmed, once the camera
+   has pulled back. The last visit's darts give way to it. */
+.plot {
+  animation: fade-in 0.5s ease-out var(--cam-final) both;
+}
+.plot .dim {
+  fill: #0f1e18;
+  opacity: 0.62;
+}
+.plot circle:not(.dim) {
+  fill: var(--gold);
+  stroke: var(--halo);
+  stroke-width: 3;
+}
+.plot .p2 {
+  fill: var(--blue);
+}
+.scene[data-shot="final"] .board-objects {
+  opacity: 0;
+  transition: opacity 0.4s ease-out var(--cam-final);
+}
+/* The darts in the thrower's colour (src/art.js, --dart). */
+.field:has(> .plate.p2) {
+  --dart: var(--blue);
+}
 .plate {
   position: absolute;
   top: calc(var(--top) + 6px);
@@ -613,13 +591,28 @@ p {
   grid-template-columns: 1fr auto;
   align-content: space-between;
   column-gap: 10px;
-  border-radius: 12px;
-  background: linear-gradient(155deg, #23261f, #141612 45%, #0e100d);
-  box-shadow:
-    inset 0 1px 0 #ffffff1c,
-    inset 0 -2px 0 #0007,
-    var(--shade) 14px #000b;
-  --accent: var(--hot);
+  filter: drop-shadow(var(--shade) 10px #0008);
+  --accent: var(--gold);
+}
+/* Chamfered slate plates edged in brass. Two layers behind the content draw the
+   shape, so neither a focus ring nor a drop shadow on the element is clipped. */
+:is(.plate, .card, .mode, .callout, .primary) {
+  isolation: isolate;
+  --cut: 12px;
+}
+:is(.plate, .card, .mode, .callout, .primary)::before,
+:is(.plate, .card, .mode, .callout)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--brass);
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+:is(.plate, .card, .mode, .callout)::after {
+  inset: 1px;
+  background: var(--slate);
+  clip-path: polygon(calc(var(--cut) - 0.5px) 0, 100% 0, 100% calc(100% - var(--cut) + 0.5px), calc(100% - var(--cut) + 0.5px) 100%, 0 100%, 0 calc(var(--cut) - 0.5px));
 }
 .plate.p2 {
   --accent: var(--blue);
@@ -640,9 +633,11 @@ p {
   color: var(--accent);
 }
 .plate-score {
-  font: var(--race);
+  font: var(--display);
   font-size: 38px;
   line-height: 0.9;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
   align-self: end;
 }
 .visit {
@@ -652,40 +647,39 @@ p {
   align-self: end;
 }
 .visit .plate-label {
-  color: var(--cream);
-  font-size: 11px;
+  font: var(--mono);
+  font-size: 10px;
+  white-space: pre;
 }
 .slots {
   display: flex;
-  gap: 5px;
+  gap: 4px;
 }
 .slot {
   display: grid;
   place-items: center;
-  width: 30px;
+  width: 34px;
   height: 24px;
-  border-radius: 5px;
-  font: var(--race);
-  font-size: 16px;
-  font-style: italic;
-  background: #ffffff0d;
-  box-shadow: inset 0 1px 2px #000a;
-  color: #ffffff3d;
+  font: 600 11.5px/1 "Martian Mono", monospace;
+  font-style: normal;
+  background: #0000002e;
+  box-shadow: inset 0 0 0 1px var(--rule);
+  color: var(--muted);
 }
 .slot.thrown {
-  background: #ffffff17;
-  color: var(--cream);
+  background: var(--mahogany);
+  box-shadow: inset 0 0 0 1px #6e3a24;
+  color: var(--chalk);
 }
 .slot.next {
-  box-shadow:
-    inset 0 0 0 2px var(--accent),
-    0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 /* 301: a suggested checkout in the darts still to throw, and a bust's darts struck out. */
 .slot.out {
-  font-size: 13px;
-  color: color-mix(in srgb, var(--accent) 70%, var(--cream));
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px dashed var(--accent);
+  box-shadow: none;
+  color: var(--accent);
 }
 .slot.void {
   color: var(--muted);
@@ -700,63 +694,68 @@ p {
 .best-plate .plate-label {
   text-align: center;
 }
+/* The landing's label: the bed and its points, and where the dart is in board
+   millimetres (x right, y down from the bull). */
 .callout {
   position: absolute;
   display: grid;
-  justify-items: center;
+  grid-template-columns: auto auto;
+  column-gap: 7px;
+  align-items: baseline;
+  padding: 6px 10px 7px 11px;
+  --cut: 7px;
   pointer-events: none;
-  transform: translate(-50%, -135%);
-  font: var(--race);
-  text-transform: uppercase;
-  text-shadow: 0 2px 6px #000;
+  transform: translate(-50%, calc(-100% - 16px));
   white-space: nowrap;
+  filter: drop-shadow(0 3px 8px #0009);
   animation: callout var(--callout) ease-out both;
 }
-.callout b {
-  font-size: 34px;
-  line-height: 0.9;
-  color: var(--cream);
-}
 .callout span {
-  font-size: 15px;
-  color: var(--cream);
-  background: #0c0d0bd9;
-  padding: 1px 8px 2px;
-  border-radius: 6px;
+  order: -1;
+  font: 700 semi-expanded 14px/1 Archivo, sans-serif;
+  color: var(--chalk);
+}
+.callout b {
+  font: var(--display);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--gold);
+}
+.callout small {
+  grid-column: 1 / -1;
+  margin-top: 5px;
+  font: var(--mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--muted);
+}
+.callout.premium::before {
+  background: var(--gold);
 }
 .callout.premium b {
-  font-size: 46px;
-  color: #ffc36a;
-  text-shadow:
-    0 0 14px #ff5732,
-    0 2px 6px #000;
+  font-size: 21px;
 }
 .callout.bust b {
-  color: var(--hot);
+  color: var(--chalk);
 }
 .callout.miss span {
-  font-size: 22px;
   color: var(--muted);
 }
 @keyframes callout {
   0% {
     opacity: 0;
-    scale: 0.6;
+    translate: 0 6px;
   }
   12% {
     opacity: 1;
-    scale: 1.12;
+    translate: 0 0;
   }
-  24% {
-    scale: 1;
-  }
-  72% {
+  75% {
     opacity: 1;
-    translate: 0 -8px;
   }
   100% {
     opacity: 0;
-    translate: 0 -22px;
+    translate: 0 -10px;
   }
 }
 .throw-control {
@@ -778,11 +777,31 @@ p {
   outline-offset: -3px;
 }
 .dart-grip {
+  position: relative;
+  isolation: isolate;
   display: block;
   height: var(--grip);
   aspect-ratio: 66 / 126;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   pointer-events: none;
+}
+/* The knurled pad: the painted dart (within the grip's box) plus tune.grab.pad
+   all round, set from the resting dart by src/input.js, so it never shows more
+   than the touch target (src/throw.js onDart). The 12px margin below matches
+   the pad, so it clears the prompt. */
+.dart-grip::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: var(--pad, -12px);
+  border-radius: 12px;
+  background:
+    repeating-linear-gradient(45deg, #0000 0 3px, #00000038 3px 4px),
+    repeating-linear-gradient(-45deg, #0000 0 3px, #ffffff10 3px 4px),
+    linear-gradient(#2b312f, #212625);
+  box-shadow:
+    inset 0 2px 6px #0008,
+    inset 0 -1px 0 #ffffff1c;
 }
 /* WebKit snaps a transform's reference box to device pixels. A fractional
    grip width moves the dart's 50% origin, and the flight's final scale turns
@@ -811,20 +830,15 @@ p {
   opacity: 0.3;
 }
 .throw-control b {
-  font: var(--race);
-  font-size: 19px;
-  text-transform: uppercase;
-  line-height: 1;
-  text-shadow: 0 2px 4px #000;
+  font: 700 semi-expanded 15px/1 Archivo, sans-serif;
 }
 .throw-control small {
   color: var(--muted);
   font-size: 13px;
-  margin-top: 3px;
-  text-shadow: 0 1px 3px #000;
+  margin-top: 5px;
 }
 .hint.nudge {
-  color: #ffc36a;
+  color: var(--gold);
   animation: nudge 0.32s ease-out;
 }
 @keyframes nudge {
@@ -844,11 +858,11 @@ p {
   opacity: 0;
 }
 .impact .impact-ring {
-  stroke: var(--cream);
+  stroke: var(--chalk);
   animation: impact-ring 0.35s ease-out;
 }
 .premium .impact-ring {
-  stroke: #ffaf61;
+  stroke: var(--gold);
   stroke-width: 3;
   animation-duration: 0.5s;
 }
@@ -903,11 +917,12 @@ p {
   flex: none;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: linear-gradient(160deg, #2a2d27e6, #121411e6);
+  border-radius: 8px;
+  background: var(--slate);
   box-shadow:
-    inset 0 1px 0 #ffffff24,
-    0 4px 12px #000a;
+    inset 0 0 0 1px #4b5451,
+    inset 0 1px 0 #ffffff1a,
+    0 2px 6px #0005;
 }
 .glass .icon {
   width: 20px;
@@ -969,10 +984,9 @@ p {
 }
 .tagline {
   text-align: center;
-  color: #deded2;
+  color: #c9c7bb;
   font-size: 15px;
   margin-bottom: 12px;
-  text-shadow: 0 1px 4px #000;
 }
 /* The game switch: one row that scrolls sideways (five games don't fit a phone's
    width). The fade on the right edge says there are more. */
@@ -988,11 +1002,11 @@ p {
   gap: 4px;
   padding: 4px;
   margin-bottom: 10px;
-  border-radius: 14px;
-  background: #0c0d0be6;
+  border-radius: 10px;
+  background: #14271f;
   box-shadow:
-    inset 0 1px 2px #000a,
-    0 10px 24px #000b;
+    inset 0 1px 3px #0009,
+    0 8px 20px #0006;
 }
 .games::-webkit-scrollbar {
   display: none;
@@ -1009,61 +1023,56 @@ p {
   padding-inline: 14px;
   white-space: nowrap;
   min-height: 44px;
-  border-radius: 10px;
-  font: var(--race);
-  font-size: 19px;
-  text-transform: uppercase;
-  color: var(--muted);
+  border-radius: 7px;
+  font: 600 semi-expanded 15px/1 Archivo, sans-serif;
+  color: #c9c7bb;
 }
 .games [aria-pressed="true"] {
-  color: var(--cream);
-  background: linear-gradient(155deg, #343830, #1b1d18);
-  box-shadow:
-    inset 0 1px 0 #ffffff24,
-    inset 0 -3px 0 var(--hot);
+  color: var(--ink);
+  background: var(--chalk);
+  box-shadow: 0 2px 4px #0005;
 }
 .modes {
   display: grid;
   gap: 10px;
 }
 .mode {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
   width: 100%;
   text-align: left;
-  padding: 13px 16px;
-  min-height: 70px;
-  border-radius: 14px;
-  background: linear-gradient(155deg, #262922f2, #131512f2 60%);
-  box-shadow:
-    inset 0 1px 0 #ffffff1f,
-    inset 3px 0 0 var(--accent),
-    0 10px 24px #000b;
+  padding: 12px 16px 12px 20px;
+  min-height: 74px;
+  --cut: 14px;
+  filter: drop-shadow(0 4px 10px #0007);
   transition: scale 0.12s;
 }
 .mode:active {
   scale: 0.98;
 }
-.solo {
-  --accent: var(--hot);
-}
-.duel {
-  --accent: var(--blue);
-}
-.mode-mark {
-  width: 42px;
-  height: 42px;
+/* Gold is the one to press first; the duel's arrow is mahogany. */
+.mode-go {
+  width: 44px;
+  height: 44px;
+  flex: none;
   display: grid;
   place-items: center;
-  background: var(--accent);
+  border-radius: 6px;
+  background: var(--gold);
   color: var(--ink);
-  border-radius: 10px;
-  box-shadow: inset 0 1px 0 #fff6;
+  box-shadow: inset 0 1px 0 #ffffff55;
 }
-.mode-mark .icon {
-  width: 23px;
-  height: 23px;
+.duel .mode-go {
+  background: var(--mahogany);
+  color: var(--chalk);
+  box-shadow:
+    inset 0 0 0 1px #6e3a24,
+    inset 0 1px 0 #ffffff26;
+}
+.mode-go .icon {
+  width: 20px;
   stroke-width: 2;
 }
 .mode-copy {
@@ -1071,73 +1080,84 @@ p {
 }
 .mode strong {
   display: block;
-  font: var(--race);
-  font-size: 25px;
-  line-height: 1;
-  text-transform: uppercase;
+  font: 700 semi-expanded 20px/1.1 Archivo, sans-serif;
 }
 .mode small {
   display: block;
   color: var(--muted);
   font-size: 14px;
-  margin-top: 3px;
+  margin-top: 5px;
 }
 .card {
-  padding: 18px 20px 20px;
-  border-radius: 18px;
-  background: linear-gradient(160deg, #262922f5, #121411f5 55%);
-  box-shadow:
-    inset 0 1px 0 #ffffff1f,
-    0 18px 44px #000c;
-  --accent: var(--hot);
+  padding: 20px 20px 18px 22px;
+  --cut: 16px;
+  filter: drop-shadow(0 8px 18px #0008);
+  --accent: var(--gold);
 }
 .card.p2 {
   --accent: var(--blue);
 }
-.handoff {
-  text-align: center;
-}
 .handoff h2 {
-  display: grid;
-  justify-items: center;
-  margin: 2px 0 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 14px;
+  row-gap: 2px;
+  margin: 6px 0 4px;
 }
 .visit-total {
-  font: var(--race);
+  font: var(--display);
   font-size: 64px;
   line-height: 1;
-  color: var(--cream);
-}
-.handoff.big .visit-total {
-  color: #ffc36a;
-  text-shadow: 0 0 22px #ff573299;
+  letter-spacing: -2px;
+  color: var(--chalk);
 }
 .handoff.flat .visit-total {
   color: var(--muted);
 }
 .caller {
-  font: var(--race);
-  font-size: 20px;
-  text-transform: uppercase;
-  color: var(--hot);
-  min-height: 0;
+  font: 700 semi-expanded 20px/1 Archivo, sans-serif;
+  padding-bottom: 3px;
+  border-bottom: 3px solid var(--brass);
+  color: var(--chalk);
+}
+.handoff.big .caller {
+  border-color: var(--gold);
+}
+.handoff.flat .caller {
+  border: 0;
+  font-size: 16px;
+  color: var(--muted);
 }
 .caller:empty {
   display: none;
 }
+/* Which beds, and how tight: the widest gap between two darts on the board. */
+.group {
+  margin-bottom: 12px;
+  font: var(--mono);
+  color: #bdbcb1;
+}
 .standings {
   display: flex;
-  justify-content: center;
-  gap: 18px;
-  font-size: 15px;
-  color: var(--muted);
-  margin-bottom: 14px;
+  flex-wrap: wrap;
+  column-gap: 22px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  font: 600 14px/1.3 Archivo, sans-serif;
+  color: #bdbcb1;
+  margin-bottom: 16px;
 }
-.standings .p1 {
-  color: color-mix(in srgb, var(--hot) 75%, var(--cream));
+.standings :is(.p1, .p2)::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 7px;
+  background: var(--gold);
 }
-.standings .p2 {
-  color: var(--blue);
+.standings .p2::before {
+  background: var(--blue);
 }
 .primary,
 .secondary {
@@ -1145,30 +1165,29 @@ p {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  font: var(--race);
-  text-transform: uppercase;
-  font-size: 21px;
-  min-height: 50px;
-  border-radius: 12px;
+  font: 700 semi-expanded 16px/1.1 Archivo, sans-serif;
+  min-height: 52px;
   padding: 10px 22px;
 }
 .primary {
-  background: linear-gradient(#ff6a48, var(--hot) 55%, #e84a28);
-  color: #161713;
-  box-shadow:
-    inset 0 1px 0 #fff6,
-    0 6px 16px #ff57323d;
+  position: relative;
+  --cut: 10px;
+  color: var(--ink);
+}
+.primary::before {
+  background: linear-gradient(#e2c06c, var(--gold) 60%);
 }
 .card .primary {
   width: 100%;
+}
+.card .primary::before {
   background: linear-gradient(
-    color-mix(in srgb, var(--accent) 80%, #fff),
-    var(--accent) 55%
+    color-mix(in srgb, var(--accent) 82%, #fff),
+    var(--accent) 60%
   );
 }
 .secondary {
-  background: #2a2c27;
-  box-shadow: inset 0 1px 0 #ffffff1a;
+  border: 1px solid var(--brass);
 }
 .full {
   width: 100%;
@@ -1178,30 +1197,34 @@ p {
   gap: 10px;
 }
 .results h1 {
-  font: var(--race);
-  font-size: 40px;
-  line-height: 1;
-  text-transform: uppercase;
-  margin-top: 4px;
+  font: var(--display);
+  font-size: 31px;
+  line-height: 1.05;
+  letter-spacing: -0.5px;
+  margin-top: 6px;
 }
 .result-score {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  font: var(--race);
-  font-size: 54px;
+  gap: 10px;
+  margin-top: 8px;
+  font: var(--display);
+  font-size: 48px;
   line-height: 1.05;
-  color: var(--hot);
+  color: var(--gold);
 }
 .result-score .p2 {
   color: var(--blue);
 }
 .result-score i {
-  color: var(--muted);
+  color: #6f7671;
   font-size: 0.6em;
+  font-style: normal;
 }
 .result-score small {
-  font-size: 18px;
+  font: var(--mono);
+  font-size: 13px;
+  text-transform: lowercase;
   color: var(--muted);
 }
 .note {
@@ -1209,10 +1232,8 @@ p {
   font-size: 15px;
 }
 .results.record .note {
-  color: #ffc36a;
-  font: var(--race);
-  font-size: 20px;
-  text-transform: uppercase;
+  color: var(--gold);
+  font: 700 semi-expanded 17px/1.3 Archivo, sans-serif;
 }
 .results-table {
   width: 100%;
@@ -1222,9 +1243,12 @@ p {
 }
 .results-table td,
 .results-table th {
-  border-bottom: 1px solid #ffffff14;
-  padding: 6px 0;
+  border-bottom: 1px solid var(--rule);
+  padding: 7px 0;
   text-align: right;
+}
+.results-table td:not(:first-child) {
+  font: 600 14px/1.3 "Martian Mono", monospace;
 }
 .results-table th:first-child,
 .results-table td:first-child {
@@ -1232,7 +1256,7 @@ p {
 }
 .results-table th {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--muted);
 }
 .actions {
@@ -1253,14 +1277,15 @@ p {
   margin: 0;
   max-width: calc(100vw - 32px);
   padding: 10px 16px;
-  border-radius: 12px;
   font-size: 14px;
-  background: #23251ff2;
-  box-shadow: 0 8px 22px #000b;
+  background: #262b2af5;
+  box-shadow:
+    inset 0 0 0 1px var(--brass),
+    0 8px 22px #000b;
 }
 .toast button {
   text-decoration: underline;
-  color: var(--cream);
+  color: var(--chalk);
   min-height: 44px;
   min-width: 44px;
   padding-inline: 8px;
@@ -1281,8 +1306,8 @@ p {
 }
 /* The last throw's tip, carried onto the card that ended the visit. */
 .handoff .tip {
-  margin: 4px 0 10px;
-  color: #ffc36a;
+  margin: -4px 0 14px;
+  color: var(--chalk);
   font-size: 15px;
 }
 
@@ -1299,11 +1324,10 @@ dialog {
   padding: 20px calc(22px + var(--right)) calc(22px + var(--bottom))
     calc(22px + var(--left));
   border: 0;
-  border-radius: 22px 22px 0 0;
-  color: var(--cream);
-  background: linear-gradient(170deg, #262922, #131512 40%);
+  color: var(--chalk);
+  background: var(--slate);
   box-shadow:
-    inset 0 1px 0 #ffffff1f,
+    inset 0 1px 0 var(--brass),
     0 -10px 50px #000c;
 }
 dialog[open] {
@@ -1321,10 +1345,9 @@ dialog::backdrop {
   gap: 14px;
 }
 .sheet-head h2 {
-  font: var(--race);
-  font-size: 32px;
-  text-transform: uppercase;
-  line-height: 1.05;
+  font: var(--display);
+  font-size: 26px;
+  line-height: 1.1;
 }
 .steps {
   list-style: none;
@@ -1336,15 +1359,16 @@ dialog::backdrop {
   counter-increment: step;
   padding: 11px 0 11px 43px;
   position: relative;
-  border-top: 1px solid #ffffff14;
+  border-top: 1px solid var(--rule);
 }
 .steps li:before {
   content: "0" counter(step);
   position: absolute;
   left: 0;
-  color: var(--hot);
-  font: var(--race);
-  font-size: 22px;
+  top: 13px;
+  color: var(--muted);
+  font: var(--mono);
+  font-size: 14px;
 }
 .steps strong,
 .steps small {
@@ -1375,7 +1399,7 @@ dialog::backdrop {
     display: none;
   }
   .mode {
-    min-height: 62px;
+    min-height: 64px;
     padding-block: 9px;
   }
   .results h1 {
@@ -1396,7 +1420,17 @@ dialog::backdrop {
     padding: 14px 16px 16px;
   }
   .visit-total {
-    font-size: 52px;
+    font-size: 48px;
+  }
+  .caller {
+    font-size: 17px;
+  }
+  .group {
+    margin-bottom: 8px;
+  }
+  .standings {
+    padding-top: 8px;
+    margin-bottom: 12px;
   }
 }
 @media (orientation: landscape) and (max-height: 500px) {
@@ -1425,7 +1459,7 @@ dialog::backdrop {
     grid-template: 1fr auto auto / auto auto;
     justify-items: start;
     align-items: end;
-    column-gap: 12px;
+    column-gap: 16px;
     left: calc(var(--cx) - 30px);
     width: auto;
     padding-bottom: 2px;
@@ -1483,7 +1517,10 @@ dialog::backdrop {
     width: calc(var(--b) * 1.6);
     bottom: auto;
     top: calc(var(--cy) - var(--b) * 0.5);
-    font-size: calc(var(--b) * 0.13);
+  }
+  /* The sign takes the treble's leader's spot. */
+  .gauge .treble {
+    display: none;
   }
   /* The results card takes the sign's spot. */
   .scene[data-shot="final"] .neon {
@@ -1498,11 +1535,8 @@ dialog::backdrop {
   .glass:hover {
     filter: brightness(1.25);
   }
-  .mode:hover {
-    box-shadow:
-      inset 0 1px 0 #ffffff1f,
-      inset 0 0 0 2px var(--accent),
-      0 10px 24px #000b;
+  .mode:hover::before {
+    background: var(--gold);
   }
 }
 @media (prefers-reduced-motion: reduce) {

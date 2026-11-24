@@ -19,6 +19,8 @@ The thin inner ring scores treble and the outer ring double. The outer bull scor
 
 On a keyboard, focus the dart, aim with the arrow keys, then press and release Space or Enter to throw. Shift and arrows make finer adjustments. Escape cancels. The keyboard places the dart exactly where the sight is, as before.
 
+Every dart's callout gives where it landed in board millimetres from the bull (x to the right, y downward). The card between visits lists the beds and the group: the widest gap between two darts that scored. The results put every dart of the match on the board, in each player's colour (gold for Player 1, blue for Player 2).
+
 For your first 45 darts on a device, the prompt also says which way a clean dart missed the bull ("Below the bull · flick harder"). A tip from the last dart of a visit stays on the card between visits.
 
 Personal bests started again with the flick (released after 20 November 2026), and the 301 record starts again with first to zero, since finishing without a double takes fewer darts. Until you set one, the lobby shows your newest older record as "Fewest · double out" or "Best · old throw"; older records are kept on the device and never overwritten. The back arrow saves your place. Select the **Resume** mode button to continue after closing the game.
@@ -56,9 +58,9 @@ Push to `main`. The Pages workflow runs the scoring tests, builds `dist/`, uploa
 - `src/throw.js` holds the release model and the tuning values for gesture sensitivity, camera, flight, grip and impact. `tune.input` sets how a flick lands; [The flick](DECISIONS.md) says which values to try first on a phone. `tune.grab` sets the touch target around the dart.
 - `scripts/model/difficulty.mjs` is a model of human thumb flicks (casual and skilled) that plays the throw and reports hit rates, Nine Dart Rush and 301 against the previous release (`scripts/model/legacy-throw.mjs`). `node scripts/model/difficulty.mjs --quick` takes about a minute. `tests/throw.test.js` uses its stroke generator.
 - `src/coach.js` picks the prompt after a throw that went astray, from what the release measured; it never changes where a dart lands. `tests/coach.test.js` covers it. `scripts/check/tabs.cjs` checks that an older tab never overwrites newer saves.
-- `src/input.js` owns pointer capture, keyboard input, frame-timed presentation and cancellation. `src/art.js` draws the playable board from the scoring constants.
+- `src/input.js` owns pointer capture, keyboard input, frame-timed presentation and cancellation. `src/art.js` draws the playable board, the lobby's measured gauge and the results plot from the scoring constants.
 - `style.css` opens with **Scene tuning**: the room's camera shots, depth, lamp and transition timings, with the landscape and short-portrait overrides beneath. `src/app.js` moves one persistent room between those shots. The play shot is untransformed, so the throw's own `tune` is unaffected.
-- `scripts/build.mjs` hashes the shipped files and worker template, then emits the scoped precache worker. Every font and image is local. The OFL font licenses are in `assets/fonts/`.
+- `scripts/build.mjs` hashes the shipped files and worker template, then emits the scoped precache worker. Every font and image is local: Archivo and Martian Mono, subset to Latin-1 as WOFF2. The OFL font licenses are in `assets/fonts/`.
 - [Design decisions](DECISIONS.md) covers the rules, iOS trade-offs and device checks.
 
 ### Next and deliberately out of scope

@@ -87,6 +87,19 @@ export function bindThrows(field, wakeAudio, land, hint, skipped) {
           (gripHeight * tune.camera.nearDepth),
       );
       hold({ ...rest, x: 0, y: 0, scale: 1 });
+      // The knurled pad behind the dart (style.css .dart-grip::before): the
+      // painted dart, kept within the grip's own box so it clears the prompt,
+      // plus tune.grab.pad all round. So it never shows more than onDart()
+      // accepts. As fractions of the grip, so a camera move can't skew it.
+      const grip = dart.parentElement.getBoundingClientRect(),
+        box = dart.firstElementChild.getBoundingClientRect(),
+        edge = (n, of) => `calc(${((Math.max(0, n) / of) * 100).toFixed(2)}% - ${tune.grab.pad}px)`;
+      dart.parentElement.style.setProperty(
+        "--pad",
+        [box.top - grip.top, grip.right - box.right, grip.bottom - box.bottom, box.left - grip.left]
+          .map((n, i) => edge(n, i % 2 ? grip.width : grip.height))
+          .join(" "),
+      );
     }
     if (id !== undefined && field.hasPointerCapture(id))
       field.releasePointerCapture(id);
