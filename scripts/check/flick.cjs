@@ -10,7 +10,7 @@ const http = require("http"), fs = require("fs"), path = require("path");
 const [, , rootArg, size = "390x844"] = process.argv;
 const root = path.resolve(rootArg);
 const [W, H] = size.split("x").map(Number);
-const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf", ".woff2": "font/woff2" };
+const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf" };
 const server = http.createServer((q, s) => { let p = decodeURIComponent(new URL(q.url, "http://x").pathname); p = path.join(root, p.slice(7) || "index.html"); fs.readFile(p, (e, b) => { if (e) { s.writeHead(404); return s.end(); } s.writeHead(200, { "Content-Type": types[path.extname(p)] || "application/octet-stream" }); s.end(b); }); });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (m) => { throw new Error(m); };
