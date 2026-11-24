@@ -31,7 +31,7 @@ const mm = (name) => {
 const route = [-103, -103, -103, /* 121 */ -103, -103, /* 1 left */ 130, /* below zero: back to 121 */ -103, -166, 130, /* 18 */ 130, 130, 130, /* 9 */ 130, 130, 130 /* single 3: game shot */]; const root = path.resolve(rootArg);
 const [W, H] = size.split("x").map(Number);
 const insets = { "320x568": [20, 0, 0, 0], "360x740": [20, 0, 0, 0], "375x667": [20, 0, 0, 0], "375x812": [44, 34, 0, 0], "390x844": [47, 34, 0, 0], "393x852": [59, 34, 0, 0], "852x393": [0, 21, 59, 59], "667x375": [0, 0, 0, 0], "932x430": [0, 21, 59, 59] }[size];
-const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf", ".woff2": "font/woff2" };
+const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf" };
 const server = http.createServer((q, s) => { let p = decodeURIComponent(new URL(q.url, "http://x").pathname); p = path.join(root, p.slice(7) || "index.html"); fs.readFile(p, (e, b) => { if (e) { s.writeHead(404); return s.end(); } s.writeHead(200, { "Content-Type": types[path.extname(p)] || "application/octet-stream" }); s.end(b); }); });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (m) => { throw new Error(m); };

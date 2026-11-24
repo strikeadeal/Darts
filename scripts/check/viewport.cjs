@@ -17,7 +17,7 @@ const [SW, SH] = (screenArg || layout).split("x").map(Number);
 const [t, b, l, r] = (process.env.INSETS || "0,0,0,0").split(",").map(Number);
 const standalone = process.env.STANDALONE === "1";
 const THROWS = +process.env.THROWS || 0;
-const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf", ".woff2": "font/woff2", ".webmanifest": "application/manifest+json" };
+const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf", ".webmanifest": "application/manifest+json" };
 const server = http.createServer((q, s) => {
   let p = decodeURIComponent(new URL(q.url, "http://x").pathname);
   if (!p.startsWith("/Darts/")) { s.writeHead(404); return s.end(); }

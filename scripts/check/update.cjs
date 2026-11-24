@@ -10,7 +10,7 @@ const pw = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 const http = require("http"), fs = require("fs"), path = require("path");
 const [, , engine = "chromium", oldDir, newDir] = process.argv;
 let root = path.resolve(oldDir);
-const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf", ".woff2": "font/woff2", ".webmanifest": "application/manifest+json" };
+const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf", ".webmanifest": "application/manifest+json" };
 const server = http.createServer((q, s) => {
   let p = decodeURIComponent(new URL(q.url, "http://x").pathname);
   if (!p.startsWith("/Darts/")) { s.writeHead(404); return s.end(); }
