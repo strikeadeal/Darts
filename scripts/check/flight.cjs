@@ -14,7 +14,7 @@ const env = process.env;
 const VW = +env.VW || 390, VH = +env.VH || 844, DPR = +env.DPR || 2;
 const THROWS = +env.THROWS || 9;
 const STROKES = (env.STROKES || "215,120,380").split(",").map(Number);
-const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf", ".webmanifest": "application/manifest+json" };
+const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf", ".woff2": "font/woff2", ".webmanifest": "application/manifest+json" };
 const server = http.createServer((q, s) => {
   let p = decodeURIComponent(new URL(q.url, "http://x").pathname);
   if (!p.startsWith("/Darts/")) { s.writeHead(404); return s.end(); }

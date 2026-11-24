@@ -6,8 +6,6 @@ const paths = {
   sound:
     '<path d="M3 9h4l5-4v14l-5-4H3zM16 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
   muted: '<path d="M3 9h4l5-4v14l-5-4H3zM16 9l6 6m0-6-6 6"/>',
-  solo: '<circle cx="12" cy="8" r="3.6"/><path d="M4 21v-2a8 8 0 0 1 16 0v2z"/>',
-  duel: '<circle cx="9" cy="8" r="3.3"/><path d="M2 20v-2a7 7 0 0 1 14 0v2zm14-15a3.4 3.4 0 0 1 0 6m2 3a6 6 0 0 1 4 6h-3"/>',
   arrow: '<path d="M3 12h17m-7-7 7 7-7 7"/>',
   trophy:
     '<path d="M7 4h10v6a5 5 0 0 1-10 0zM7 6H3v2a5 5 0 0 0 5 5m9-7h4v2a5 5 0 0 1-5 5m-4 2v5m-4 1h8"/>',
@@ -66,19 +64,21 @@ const dartDefinitions = `
     <stop offset=".34" stop-color="#fff"/><stop offset=".48" stop-color="#d3dcd9"/>
     <stop offset=".71" stop-color="#768389"/><stop offset="1" stop-color="#374047"/>
   </linearGradient>
-  <linearGradient id="red-shaft">
-    <stop stop-color="#8a1021"/><stop offset=".28" stop-color="#ff6770"/>
-    <stop offset=".48" stop-color="#e43543"/><stop offset="1" stop-color="#700c1e"/>
+  <linearGradient id="shaft-shade">
+    <stop stop-opacity=".55"/><stop offset=".28" stop-color="#fff" stop-opacity=".45"/>
+    <stop offset=".48" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-opacity=".5"/>
   </linearGradient>
   <g id="dart-body">
     <path d="M0 0 2.1 19h-4.2Z" fill="url(#steel)"/>
     <path d="M-2.1 15q-3.1 2-3.1 6v21q0 3 2.3 5h5.8q2.3-2 2.3-5V21q0-4-3.1-6Z" fill="url(#steel)"/>
     ${barrelGrooves}
-    <path d="M-3 46q3 1 6 0l1.2 33-3.6 25-4-25Z" fill="url(#red-shaft)"/>
+    <path d="M-3 46q3 1 6 0l1.2 33-3.6 25-4-25Z" style="fill:var(--dart,#d4af5a)"/>
+    <path d="M-3 46q3 1 6 0l1.2 33-3.6 25-4-25Z" fill="url(#shaft-shade)"/>
   </g>
   <g id="dart-fin" transform="scale(.77 1)">
-    <path d="M0 76Q15 58 24 60Q30 61 30 68L26 94Q25 100 19 106L0 125Z" stroke="#771e2a" stroke-width=".6"/>
-    <path d="M0 76Q17 60 24 62L0 110Z" fill="#ff8a76" opacity=".42"/>
+    <path d="M0 76Q15 58 24 60Q30 61 30 68L26 94Q25 100 19 106L0 125Z" stroke="#2b2a26" stroke-width=".7"/>
+    <path d="M0 76Q17 60 24 62L0 110Z" fill="#fff" opacity=".28"/>
+    <path d="M3 80Q15 66 24.5 65.5L25 69Q16 69.5 4 84Z" style="fill:var(--dart,#d4af5a)"/>
   </g>`;
 
 // The tip is the origin. The shaft axis points towards the camera, with
@@ -100,12 +100,14 @@ function geometry({ ax, ay, roll }) {
     fins.push({
       transform: `matrix(${rx} ${ry} ${ax} ${ay} 0 0)`,
       depth: rz,
-      light: Math.round(37 + 13 * Math.cos(angle - 0.7)),
+      light: Math.round(72 + 12 * Math.cos(angle - 0.7)),
     });
   }
   return { body, fins: fins.sort((a, b) => a.depth - b.depth) };
 }
 
+// Chalk flights, shaded by each vane's angle to the lamp.
+const flight = (light) => `hsl(44,18%,${light}%)`;
 function model(pose) {
   const { body, fins } = geometry(pose);
   return (
@@ -113,7 +115,7 @@ function model(pose) {
     fins
       .map(
         (fin) =>
-          `<use href="#dart-fin" transform="${fin.transform}" fill="hsl(352,76%,${fin.light}%)"/>`,
+          `<use href="#dart-fin" transform="${fin.transform}" fill="${flight(fin.light)}"/>`,
       )
       .join("")
   );
@@ -126,7 +128,7 @@ export function poseModel(group, pose) {
   fins.forEach((fin, i) => {
     const vane = group.children[1 + i];
     vane.setAttribute("transform", fin.transform);
-    vane.setAttribute("fill", `hsl(352,76%,${fin.light}%)`);
+    vane.setAttribute("fill", flight(fin.light));
   });
 }
 export const rest = {
@@ -171,16 +173,17 @@ function boardFace() {
     .join("");
   return `<defs>
     ${dartDefinitions}
-    <linearGradient id="sidewall"><stop stop-color="#121314"/><stop offset=".19" stop-color="#585651"/><stop offset=".53" stop-color="#33312e"/><stop offset=".89" stop-color="#141516"/><stop offset="1" stop-color="#08090a"/></linearGradient>
-    <linearGradient id="rim" x2=".86" y2="1"><stop stop-color="#8b8b80"/><stop offset=".42" stop-color="#383a39"/><stop offset=".72" stop-color="#151718"/><stop offset="1" stop-color="#484643"/></linearGradient>
-    <linearGradient id="number-band" x2=".45" y2="1"><stop stop-color="#292b2b"/><stop offset=".55" stop-color="#17191a"/><stop offset="1" stop-color="#101112"/></linearGradient>
+    <linearGradient id="sidewall"><stop stop-color="#1a0b06"/><stop offset=".19" stop-color="#5a2c1b"/><stop offset=".53" stop-color="#3a1b10"/><stop offset=".89" stop-color="#1c0d07"/><stop offset="1" stop-color="#0c0503"/></linearGradient>
+    <linearGradient id="rim" x2=".86" y2="1"><stop stop-color="#ecd393"/><stop offset=".42" stop-color="#c9a554"/><stop offset=".72" stop-color="#7d6532"/><stop offset="1" stop-color="#d4af5a"/></linearGradient>
+    <linearGradient id="number-band" x2=".45" y2="1"><stop stop-color="#7a3f27"/><stop offset=".45" stop-color="#4a2417"/><stop offset=".72" stop-color="#3a1b10"/><stop offset="1" stop-color="#5e2e1c"/></linearGradient>
     <radialGradient id="face-light" cx=".25" cy=".18" r=".95"><stop stop-color="#fff" stop-opacity=".10"/><stop offset=".51" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#25201e" stop-opacity=".13"/></radialGradient>
     <pattern id="sisal" width="49" height="49" patternUnits="userSpaceOnUse"><image width="49" height="49" href="./assets/sisal.png"/></pattern>
     <g id="wire"><path d="${spokes.join(" ")}"/>${hoops}</g>
   </defs>
-  <circle cy="8" r="202" fill="url(#sidewall)" stroke="#101111"/>
-  <path d="M-197 49a202 202 0 0 0 391 11" fill="none" stroke="#777369" stroke-opacity=".45" stroke-width=".8"/>
+  <circle cy="8" r="202" fill="url(#sidewall)" stroke="#0c0503"/>
+  <path d="M-197 49a202 202 0 0 0 391 11" fill="none" stroke="#c9a554" stroke-opacity=".35" stroke-width=".8"/>
   <circle r="202" fill="url(#rim)"/><circle r="199.5" fill="url(#number-band)"/>
+  <circle r="${radii.edge + 2.6}" fill="none" stroke="#c9a554" stroke-width="1.6"/>
   ${beds.join("")}
   <circle r="${radii.outerBull}" fill="#128959"/><circle r="${radii.bull}" fill="#c52639"/>
   <circle r="${radii.edge}" fill="url(#sisal)"/><circle r="${radii.edge}" fill="url(#face-light)"/>
@@ -189,7 +192,7 @@ function boardFace() {
     <use href="#wire" stroke="#d0ccc0" stroke-width="1.05"/>
     <use href="#wire" transform="translate(-.2,-.22)" stroke="#fffbee" stroke-width=".32"/>
   </g>
-  <g text-anchor="middle" fill="#f7f6ed">${numbers.join("")}</g>`;
+  <g text-anchor="middle" fill="#eae6da">${numbers.join("")}</g>`;
 }
 const face = boardFace();
 
@@ -305,6 +308,36 @@ export function board(hits, impactClass = "", mark = null) {
     <svg class="finish" viewBox="-211 -211 422 422" aria-hidden="true" data-bed="${(mark?.key ?? "").replaceAll('"', "&quot;")}">${mark?.svg ?? ""}</svg>
     <svg class="approach" viewBox="-100 -100 200 200" aria-hidden="true"></svg>
     <svg class="board-objects" viewBox="-211 -211 422 422" aria-hidden="true">${darts}
-    <g id="sight" visibility="hidden" fill="none" stroke-width="2"><circle r="10" stroke="#151515" stroke-width="5"/><circle r="10" stroke="#fff"/><circle r="2" fill="#ff5732"/></g>
+    <g id="sight" visibility="hidden" fill="none" stroke-width="2"><circle r="10" stroke="#151515" stroke-width="5"/><circle r="10" stroke="#fff"/><circle r="2" fill="#d4af5a"/></g>
   </svg>`;
+}
+
+// Where a point in the board's own plane (mm) lands in the face's projection.
+const onFace = ([x, y]) => [x + tune.camera.skew * y, tune.camera.faceHeight * y];
+
+// The lobby's drawing of the board: the playing area's diameter, and the treble
+// ring's radii on a leader, in the board's own millimetres.
+export const gauge = (() => {
+  const e = radii.edge,
+    low = 236,
+    [tx, ty] = onFace(polar(45, (radii.trebleIn + radii.trebleOut) / 2));
+  return `<svg class="gauge" viewBox="-211 -211 422 422" aria-hidden="true">
+    <path d="M${-e} 0V${low + 12}M${e} 0V${low + 12}M${-e + 4} ${low}H-48M48 ${low}H${e - 4}"/>
+    <path class="tip" d="M${-e} ${low}l13 -4.5v9zM${e} ${low}l-13 -4.5v9z"/>
+    <text x="0" y="${low + 7}" text-anchor="middle">Ø ${2 * e}</text>
+    <g class="treble"><path d="M${tx} ${ty}L190 -170H214"/><circle class="tip" cx="${tx}" cy="${ty}" r="3.5"/>
+    <text x="220" y="-174" class="name">Treble</text><text x="220" y="-150">R${radii.trebleIn}–${radii.trebleOut}</text></g>
+  </svg>`;
+})();
+
+// The results: every dart of the match as a dot in the thrower's colour, over
+// the board dimmed. `darts` is [{ hit, seat }], seat "p1" or "p2".
+export function plot(darts) {
+  const dots = darts
+    .map(({ hit, seat }) => {
+      const p = boardPosition(hit);
+      return `<circle class="${seat}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="12"/>`;
+    })
+    .join("");
+  return `<svg class="plot" viewBox="-211 -211 422 422" aria-hidden="true"><circle class="dim" r="203" transform="${plane}"/>${dots}</svg>`;
 }

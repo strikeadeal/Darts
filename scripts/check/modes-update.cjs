@@ -11,7 +11,7 @@ const pw = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 const http = require("http"), fs = require("fs"), path = require("path");
 const [, , engine = "chromium", oldDir, newDir, nextDir] = process.argv;
 let root = path.resolve(oldDir);
-const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf", ".webmanifest": "application/manifest+json" };
+const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".ttf": "font/ttf", ".woff2": "font/woff2", ".webmanifest": "application/manifest+json" };
 const server = http.createServer((q, s) => {
   let p = decodeURIComponent(new URL(q.url, "http://x").pathname);
   if (!p.startsWith("/Darts/")) { s.writeHead(404); return s.end(); }
@@ -72,7 +72,7 @@ const sectors = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9,
   await p.waitForSelector("#panel > :not(.ghost) #next", { timeout: 10000 });
   const card = await p.evaluate(() => [document.querySelector(".handoff .visit-total").textContent, document.querySelector("#updated").textContent]);
   const after = await raw();
-  check(card[0] === "180" && card[1].startsWith("Updated · Three new games") && after["dartshift.301.v2"] === before["dartshift.301.v2"] && after["dartshift.save.v1"] === before["dartshift.save.v1"], "Update game resumed the 301 card with every save unchanged", card);
+  check(card[0] === "180" && card[1].startsWith("Updated · A new look") && after["dartshift.301.v2"] === before["dartshift.301.v2"] && after["dartshift.save.v1"] === before["dartshift.save.v1"], "Update game resumed the 301 card with every save unchanged", card);
 
   // 3. Cricket, left on its first card, then another update.
   await p.click("#next");

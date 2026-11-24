@@ -1331,3 +1331,44 @@ Chromium only (Playwright 1.63), under `/Darts/`. This session had no WebKit, Ma
 - **Around the Clock and Shanghai.** Is the lit number obvious, and do the empty slots' hints make sense?
 - **Lengths.** If casual players often hit the 15- or 20-round limits, raise `rules.clock.rounds` or `rules.cricket.rounds` in `src/game.js`.
 - **VoiceOver** on one visit of each game.
+
+## New look · 24 November 2026
+
+Players said the game looked generic ("AI slop"). Three directions were mocked up. This release builds the chosen one, **Tungsten Local**: the layout of a measuring instrument in the colours of a pub darts room. Rules, scoring, the throw and `tune` are unchanged.
+
+### The direction
+
+- **Instrument, not arcade.** The game already scores every dart in board millimetres, so the look shows it. Each callout gives x and y in mm. The card between visits gives the group (the widest gap between two scoring darts). The lobby board carries a dimension line (Ø 340) and a treble leader (R99–107). The results plot every dart of the match on the dimmed board.
+- **Pub colours.** A bottle-green wall, slate plates with a brass hairline, a mahogany number ring with a brass rim, and chalk text. Gold leaf marks what you can press, and Player 1; chalk blue is Player 2.
+- **One shape.** Plates, cards, mode buttons, callouts and primary buttons all have the same chamfered corners (`--cut`). They're drawn as `::before` (brass) and `::after` (slate) clip-paths, so focus rings and drop shadows aren't clipped.
+- **Type.** Archivo, with its Expanded width for numbers and headings, carries everything you read. Martian Mono is used only for measurements: the mm readouts, the dart slots and the round count. The italic, upper-case display face is gone; only the game sign keeps capitals, as painted signs do.
+
+### What changed
+
+- **Tokens** (top of the layout section in `style.css`): `--field` #1a3329, `--slate`, `--brass` #8a7343, `--mahogany` #4a2417, `--chalk` #eae6da, `--muted` #a4a89e, `--gold` #d4af5a, `--blue` #9ccbe3, `--ink` #1c201f (text on gold or blue), and `--halo` #141817 (the dark edge under gold and chalk on the board). `--display` and `--mono` hold the two type settings. Every old colour token is gone.
+- **Fonts.** Anton, Barlow and Barlow Condensed (three TTFs) are replaced by two variable WOFF2 files, subset to Basic Latin, Latin-1 and a few punctuation marks: Archivo (weight 400–800, width 100–125%) and Martian Mono (400–600). The local server and check scripts now serve `.woff2`.
+- **The room.** The panels, skirting and mat are gone; the wall is a green field lit by the same lamp. The game sign is set in type instead of neon tubes. It keeps the `.neon span` and `.neon b` markup, which the update checks read.
+- **The board** (`src/art.js`): mahogany number ring, brass rim and hairline, chalk numbers and a gold sight. Flights are chalk. The shaft and a flight stripe take `--dart`, which the play field sets to the thrower's colour (`.field:has(> .plate.p2)`).
+- **The knurled pad** under the dart is now exactly its grab area (the painted dart's box plus `tune.grab.pad`, clamped to the grip), measured in `reset()` in `src/input.js`. It was a fixed inset before.
+- **301's finishing highlight** and the Cricket, Clock and Shanghai badges use gold and chalk with the dark halo, so they read on the cream and black beds.
+- **Small phones.** On short portrait screens the camera steps back a little further between visits (`--step-y`, `--step-z`) and the visit card is tighter, so the taller card (it now has the group line) doesn't cover the board.
+- **Icons** are recoloured to the same green, gold and chalk; the shape is unchanged.
+
+### Verification
+
+- **Build.** All 73 Node tests pass. The build precaches 21 local assets, down from 23: three font files and their licences became two.
+- **Complete matches** (`scripts/check/match.cjs`, Chromium under `/Darts/`, clean consoles, results matching the saved hits):
+  - 301 keyboard, solo and duel, at 390×844 (the highlight was checked before every dart);
+  - Nine Dart Rush touch solo at 390×844, and keyboard duel at 375×667 with reduced motion;
+  - Cricket duel and Around the Clock solo at 390×844, and a Shanghai duel at 852×393 (the overlay equalled `boardTargets()` before every dart).
+- **`finish.cjs`** passes at all nine sizes and resumes the old double-out save. **`viewport.cjs`** (393×852 installed, 59/34 insets) has no errors. **`flick.cjs`** at 390×844, 320×568 and 852×393: the largest tip error was 0.000015 px.
+- **Update, offline and rollback** (`modes-update.cjs`, from main at 16501cc as it was written for): all five steps pass. Its expected release note now reads "A new look".
+- **Not passing, and not from this change:**
+  - `tabs.cjs` fails at setup ("rush":27, "darts301":null) on main's own build too.
+  - `update.cjs` expects the first-to-zero release note, so it passes only against that release.
+- **Screens** checked by eye at 390×844, 375×667 and 852×393: lobby, play, the callout, the between-visits card, 301's finish, results and help, plus Cricket, Clock and Shanghai in play.
+
+**Still to check on the phone:**
+- **Contrast in daylight.** The muted labels (#a4a89e on slate) and the gold-on-green plate edges outdoors.
+- **The mm readouts.** Do players read them, or are they noise? If they're noise, drop the `<small>` from the callout and keep the group line.
+- **Fonts on first launch.** The display font is preloaded. Check that the first lobby doesn't flash a fallback face on a slow connection.

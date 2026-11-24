@@ -19,7 +19,7 @@ import {
   mergeRecords,
 } from "./game.js";
 import { coach } from "./coach.js";
-import { icon, board, landed, readyDart, finishMark, targetMark } from "./art.js";
+import { icon, board, landed, readyDart, finishMark, targetMark, gauge, plot } from "./art.js";
 import { bindThrows, bindTurnButton, flyDart } from "./input.js";
 import { boardPosition } from "./throw.js";
 import { unlock, impact, whoosh, fanfare } from "./sound.js";
@@ -156,7 +156,7 @@ function shoot(shot) {
 // update waits for the lobby, a handoff or the results, and the install card
 // shows only in the lobby. One at a time, the update first.
 // One line on what this release changed, shown once after Update game. Edit per release.
-const releaseNote = "Three new games: Cricket, Around the Clock and Shanghai.";
+const releaseNote = "A new look, and every dart measured in millimetres.";
 const updatedKey = "dartshift.updated"; // session-only, set by Update game
 const installKey = "dartshift.install.v1"; // set once the install card is dismissed
 const notices = { update: false, later: false, install: false, updated: "" };
@@ -296,7 +296,7 @@ function afterHold(run) {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches || !(ms > 0)) run();
   else defer(run, ms);
 }
-// Replay a one-shot room effect (lamp flare, neon relight). No idle loops.
+// Replay a one-shot room effect (lamp flare, sign relight). No idle loops.
 // Prefixed so the scene never picks up an element's rule (.flare is the lamp).
 function moment(name) {
   scene.classList.remove("moment-" + name);
@@ -573,7 +573,7 @@ function overlay() {
   const label = finishTarget(match, acknowledged);
   return label && { key: label, svg: finishMark(label) };
 }
-// The neon sign names the game (index.html holds Nine Dart Rush for first paint).
+// The sign over the board names the game (index.html holds Nine Dart Rush for first paint).
 function sign() {
   const [top, big] = games[game].neon;
   $(".neon span").textContent = top;
@@ -636,10 +636,9 @@ function lobbyParts() {
           ? " · " + view().summary(s)
           : " · Saved on this device";
     return `<button class="mode ${mode}" data-mode="${mode}">
-      <span class="mode-mark">${icon(mode)}</span>
       <span class="mode-copy"><strong>${s ? "Resume " + title : title}</strong>
       <small>${s ? "Round " + s.round + " of " + g.rounds + left : g[mode]}</small></span>
-      ${icon("arrow")}</button>`;
+      <span class="mode-go">${icon("arrow")}</span></button>`;
   };
   const pick = (id, name) =>
     `<button data-game="${id}" aria-pressed="${game === id}">${name}</button>`;
@@ -659,7 +658,7 @@ function lobbyParts() {
 function home() {
   tip = "";
   const { plate, panel: lobby } = lobbyParts();
-  render("wide", plate + `<div class="board-wrap">${board(lobbyDarts)}</div>`, lobby);
+  render("wide", plate + `<div class="board-wrap">${board(lobbyDarts)}${gauge}</div>`, lobby);
   bindLobby();
 }
 function bindLobby() {
@@ -675,7 +674,7 @@ function bindLobby() {
     .forEach((b) => (b.onclick = () => pickGame(b.dataset.game)));
 }
 // Switching game repaints the lobby in place: the board and camera stay, the
-// buttons keep focus, and the neon relights with the new name.
+// buttons keep focus, and the sign relights with the new name.
 function pickGame(next) {
   if (next === game) return;
   wakeAudio();
@@ -825,6 +824,15 @@ function plate(s, shown, round, visit, closed, bust = null) {
       <span class="slots" role="img" aria-label="${where}">${slots}</span></span>
   </div>`;
 }
+// Board millimetres with a true minus sign: "−131.0".
+const mm = (n) => n.toFixed(1).replace("-", "−");
+// The visit's beds, and its group: the widest gap between two darts on the board.
+function grouping(hits) {
+  const on = hits.filter((h) => scoreAt(h.x, h.y).points);
+  let wide = 0;
+  for (const a of on) for (const b of on) wide = Math.max(wide, Math.hypot(a.x - b.x, a.y - b.y));
+  return hits.map(bedName).join(" · ") + (on.length > 1 ? " — group " + mm(wide) + " mm" : "");
+}
 // Score pop at the impact point, on the board itself.
 // `note` is the 301 outcome of this dart: "bust" or "out" (game shot).
 // `look` is { top, name, tier } from a game's view (Cricket, Around the Clock, Shanghai).
@@ -836,7 +844,7 @@ function callout(hit, note = "", look = null) {
   let top = note === "bust" ? "<b>Bust</b>" : h.points ? "<b>+" + h.points + "</b>" : "";
   let name = note === "out" ? "Game shot" : h.points === 50 ? "Bull" : h.label;
   if (look) ({ tier, name } = look), (top = look.top ? "<b>" + look.top + "</b>" : "");
-  return `<div class="callout ${tier}" style="left:${((p.x + 211) / 4.22).toFixed(2)}%;top:${((p.y + 211) / 4.22).toFixed(2)}%" aria-hidden="true">${top}<span>${name}</span></div>`;
+  return `<div class="callout ${tier}" style="left:${((p.x + 211) / 4.22).toFixed(2)}%;top:${((p.y + 211) / 4.22).toFixed(2)}%" aria-hidden="true">${top}<span>${name}</span><small>x ${mm(hit.x)}  y ${mm(hit.y)} mm</small></div>`;
 }
 // Impact adds the new dart to the board already on screen instead of rebuilding
 // the stage at the moment the eye is on the landing (see showLanding). Returns
@@ -919,6 +927,7 @@ function play(impactClass = "", leaving = false) {
     card = `<section class="card handoff${tier}${duel ? " " + seatClass(s.player) : ""}" aria-labelledby="visit-title">
       <p class="eyelabel">${duel ? playerName(shown) + " · " : ""}Visit complete</p>
       <h2 id="visit-title">${heading}</h2>
+      <p class="group">${grouping(last.hits)}</p>
       <p class="standings">${duel ? byName(2).map((i) => `<span class="${seatClass(i)}">${playerName(i)} · ${look ? look.big(s, i) : s.totals[i]}</span>`).join("") : mine}</p>
       ${tip ? `<p class="tip">${tip}</p>` : ""}
       <button class="primary big" id="next">${duel ? "Pass to " + playerName(s.player) : "Start round " + s.round}${icon("arrow")}</button>
@@ -1173,7 +1182,7 @@ function finish(impactClass = "") {
   const world = `<div class="field">${plate(s, end.player, end.round, visit, true, end.bust)}
        <div class="board-wrap">${keep ? "" : board(visit, impactClass) + (impactClass ? callout(last, note, said) : "")}</div></div>`;
   const results = `<section class="card results${freshBest && !duel ? " record" : ""}" aria-labelledby="result-title">
-      <p class="eyelabel">${is301() ? (doubleOut(match) ? "301 · double out · " : "301 · ") : look ? games[game].name + " · " : ""}${duel ? "Local duel" : "Solo run"}</p>
+      <p class="eyelabel">${is301() ? (doubleOut(match) ? "301 · double out · " : "301 · ") : games[game].name + " · "}${duel ? "Local duel" : "Solo run"}</p>
       <h1 id="result-title">${title}</h1>
       <div class="result-score">${score}</div>
       <p class="note">${line}</p>
@@ -1184,6 +1193,10 @@ function finish(impactClass = "") {
     finishedHere = true;
     keepStorage();
     render("final", world, results, keep);
+    // Every dart of the match, over the board the camera pulls back from.
+    const wrap = stage.querySelector(".board-wrap");
+    wrap.querySelector(".plot")?.remove();
+    wrap.insertAdjacentHTML("beforeend", plot(s.visits.flatMap((v) => v.hits.map((hit) => ({ hit, seat: seatClass(v.player) })))));
     // A duel rematch hands the first throw to the other player.
     bindTurnButton($("#again"), () => start(match.mode, duel ? 1 - (match.first || 0) : 0));
     bindTurnButton($("#lobby"), home);
