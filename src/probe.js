@@ -48,6 +48,8 @@ function snapshot(why) {
     safe: ["top", "bottom", "left", "right"].map(inset).join(" "),
     room: `scene ${rect("#scene")} · board ${rect(".board-wrap")} · throw ${rect("#throw")}`,
     grip: rect(".dart-grip"),
+    // The baked light (src/light.js): how long each bake took, and at what size.
+    light: `${document.querySelector("#scene").classList.contains("lit") ? "lit" : "flat"} · ${performance.getEntriesByType("measure").filter((e) => e.name === "light").map((e) => Math.round(e.duration) + " ms").join(", ") || "–"} · face ${document.querySelector(".room-face")?.width ?? 0}px`,
     pointer: last,
     touch: lastTouch,
   };

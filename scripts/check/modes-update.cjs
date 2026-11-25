@@ -1,5 +1,6 @@
 // Update game, offline launch and rollback across the three new games. Needs Playwright; not part of the build.
 // node scripts/check/modes-update.cjs <chromium|webkit> <previous release dist> <this build's dist> <this build, one byte changed>
+// env NOTE: the start of the release note this build shows (default: the three new games' release).
 // 1. The previous release, with a real service worker: a 301 solo by keyboard left on its first visit card,
 //    with mute on and a Nine Dart Rush best.
 // 2. This build is published; Update game resumes that card, and the release note shows.
@@ -72,7 +73,7 @@ const sectors = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9,
   await p.waitForSelector("#panel > :not(.ghost) #next", { timeout: 10000 });
   const card = await p.evaluate(() => [document.querySelector(".handoff .visit-total").textContent, document.querySelector("#updated").textContent]);
   const after = await raw();
-  check(card[0] === "180" && card[1].startsWith("Updated · Three new games") && after["dartshift.301.v2"] === before["dartshift.301.v2"] && after["dartshift.save.v1"] === before["dartshift.save.v1"], "Update game resumed the 301 card with every save unchanged", card);
+  check(card[0] === "180" && card[1].startsWith(process.env.NOTE || "Updated · Three new games") && after["dartshift.301.v2"] === before["dartshift.301.v2"] && after["dartshift.save.v1"] === before["dartshift.save.v1"], "Update game resumed the 301 card with every save unchanged", card);
 
   // 3. Cricket, left on its first card, then another update.
   await p.click("#next");
