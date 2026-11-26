@@ -453,11 +453,12 @@ export function bake({ b, dpr, face, wall, floor, sectors }) {
     },
   );
 
-  // The wall and surround: soft, so about one texel per CSS px is plenty.
+  // The wall and surround are soft, so 0.6 texels per CSS px is plenty, and it
+  // keeps the pixels the compositor carries down (DECISIONS.md, measured at 1).
   const W = 3.6,
     top = 2.0,
     H = top + s.floorDrop;
-  const wallScale = Math.min(1, dpr, Math.sqrt(1.6e6 / (W * H * b * b)));
+  const wallScale = Math.min(0.6, dpr, Math.sqrt(1.6e6 / (W * H * b * b)));
   const rs = (s.surround / 2) * mm;
   draw(programs[1], wall, Math.round(W * b * wallScale), Math.round(H * b * wallScale), {
     uRect: [(-W / 2) * mm, -top * mm, (W / 2) * mm, s.floorDrop * mm],
@@ -479,7 +480,7 @@ export function bake({ b, dpr, face, wall, floor, sectors }) {
   // The floor: seen at a glancing angle, so a lower resolution avoids shimmer.
   const FW = 3.2,
     FD = s.floorDepth;
-  const floorScale = Math.min(0.75, dpr);
+  const floorScale = Math.min(0.45, dpr);
   draw(programs[2], floor, Math.round(FW * b * floorScale), Math.round(FD * b * floorScale), {
     uRect: [(-FW / 2) * mm, 0, (FW / 2) * mm, FD * mm],
     uFloorY: s.floorDrop * mm,

@@ -312,7 +312,10 @@ p {
   width: calc(var(--b) * 3.6);
   height: calc(var(--b) * (2 + var(--floor-drop)));
 }
+/* Its own layer, as the SVG board had: a dart, shadow or callout over it never
+   repaints it ("Grab and flight"). */
 .room-face {
+  will-change: transform;
   left: calc(var(--cx) - var(--b) / 2);
   top: calc(var(--cy) - var(--b) / 2);
   width: var(--b);
