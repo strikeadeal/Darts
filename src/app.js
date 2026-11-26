@@ -17,13 +17,15 @@ import {
   saveKeys,
   learnDarts,
   mergeRecords,
+  sectors,
 } from "./game.js";
 import { coach } from "./coach.js";
-import { icon, board, landed, readyDart, finishMark, targetMark } from "./art.js";
+import { icon, board, landed, readyDart, finishMark, targetMark, litFace, flightColour } from "./art.js";
 import { bindThrows, bindTurnButton, flyDart } from "./input.js";
 import { boardPosition } from "./throw.js";
-import { unlock, impact, whoosh, fanfare } from "./sound.js";
+import { unlock, impact, whoosh, fanfare, click } from "./sound.js";
 import { fitScreen } from "./viewport.js";
+import { bake } from "./light.js";
 
 const $ = (s) => document.querySelector(s);
 const scene = $("#scene"),
@@ -156,7 +158,7 @@ function shoot(shot) {
 // update waits for the lobby, a handoff or the results, and the install card
 // shows only in the lobby. One at a time, the update first.
 // One line on what this release changed, shown once after Update game. Edit per release.
-const releaseNote = "Three new games: Cricket, Around the Clock and Shanghai.";
+const releaseNote = "A new look: a lit room, solid darts and keys you can press.";
 const updatedKey = "dartshift.updated"; // session-only, set by Update game
 const installKey = "dartshift.install.v1"; // set once the install card is dismissed
 const notices = { update: false, later: false, install: false, updated: "" };
@@ -269,6 +271,12 @@ function settle(event) {
 }
 const skipped = (event) => (skip?.event === event ? skip.dart || {} : null);
 addEventListener("pointerdown", settle, true);
+// Keys click when pressed. iOS shows :active (the key going down) only once the
+// page listens for touches.
+addEventListener("touchstart", () => {}, { passive: true });
+addEventListener("click", (event) => {
+  if (!muted && event.target.closest?.("button:not(#throw)")) click();
+});
 addEventListener("keydown", settle, true);
 // A landing that ends a visit or the match holds on the dart (--hold) before the
 // camera steps back. The shot change and card are made when the hold ends: the
@@ -390,6 +398,8 @@ const byName = (n) => (n === 2 && match?.first ? [1, 0] : [...Array(n).keys()]);
 const games = {
   rush: {
     name: "Nine Dart Rush",
+    short: "Rush",
+    emblem: "rush",
     neon: ["NINE DART", "RUSH"],
     tagline: "Three rounds. Nine darts. Run up the score.",
     solo: "Chase your personal best.",
@@ -400,6 +410,8 @@ const games = {
   },
   301: {
     name: "301",
+    short: "301",
+    emblem: "x01",
     neon: ["FIRST TO ZERO", "301"],
     tagline: "Count down from 301. First to exactly zero wins.",
     solo: "Fewest darts to zero.",
@@ -411,6 +423,8 @@ const games = {
   },
   cricket: {
     name: "Cricket",
+    short: "Cricket",
+    emblem: "cricket",
     neon: ["CLOSE 15 TO 20", "CRICKET"],
     tagline: "Close 15 to 20 and the bull. Score on numbers your rival hasn't closed.",
     solo: "Close all seven, fewest darts.",
@@ -420,6 +434,8 @@ const games = {
   },
   clock: {
     name: "Around the Clock",
+    short: "Clock",
+    emblem: "clock",
     neon: ["AROUND THE", "CLOCK"],
     tagline: "Hit 1 to 20 in order, then the bull.",
     solo: "Fewest darts round the board.",
@@ -429,6 +445,8 @@ const games = {
   },
   shanghai: {
     name: "Shanghai",
+    short: "Shanghai",
+    emblem: "shanghai",
     neon: ["SEVEN ROUNDS", "SHANGHAI"],
     tagline: "Round 1 scores only 1s, round 2 only 2s, up to 7.",
     solo: "Chase your best score.",
@@ -638,16 +656,16 @@ function lobbyParts() {
     return `<button class="mode ${mode}" data-mode="${mode}">
       <span class="mode-mark">${icon(mode)}</span>
       <span class="mode-copy"><strong>${s ? "Resume " + title : title}</strong>
-      <small>${s ? "Round " + s.round + " of " + g.rounds + left : g[mode]}</small></span>
-      ${icon("arrow")}</button>`;
+      <small>${s ? "Round " + s.round + " of " + g.rounds + left : g[mode]}</small></span></button>`;
   };
-  const pick = (id, name) =>
-    `<button data-game="${id}" aria-pressed="${game === id}">${name}</button>`;
+  // Five keys in one row; the full name is on the neon sign and the key's label.
+  const pick = (id) =>
+    `<button data-game="${id}" aria-pressed="${game === id}" aria-label="${games[id].name}">${icon(games[id].emblem)}<span>${games[id].short}</span></button>`;
   return {
     plate: `<div class="plate best-plate"><span class="plate-label">${label}</span><b class="plate-score">${bestText(shown)}</b></div>`,
     panel: `<section class="lobby" aria-labelledby="lobby-title">
        <h1 id="lobby-title" class="sr">Dartshift · ${g.name}</h1>
-       <div class="games" role="group" aria-label="Game">${gameOrder.map((id) => pick(id, games[id].name)).join("")}</div>
+       <div class="games" role="group" aria-label="Game">${gameOrder.map(pick).join("")}</div>
        <p class="tagline">${g.tagline}</p>
        <div class="modes">
          ${modeButton("solo", "Solo run")}
@@ -658,15 +676,12 @@ function lobbyParts() {
 }
 function home() {
   tip = "";
+  flightColour(1);
   const { plate, panel: lobby } = lobbyParts();
   render("wide", plate + `<div class="board-wrap">${board(lobbyDarts)}</div>`, lobby);
   bindLobby();
 }
 function bindLobby() {
-  // The game row scrolls sideways: bring the chosen one into view (never the page).
-  const row = panel.querySelector(":scope > .lobby:not(.ghost) .games"),
-    on = row?.querySelector('[aria-pressed="true"]');
-  if (on) row.scrollLeft = on.offsetLeft - (row.clientWidth - on.offsetWidth) / 2;
   panel
     .querySelectorAll(".lobby [data-mode]")
     .forEach((b) => (b.onclick = () => selectMode(b.dataset.mode)));
@@ -897,6 +912,8 @@ function play(impactClass = "", leaving = false) {
   const round = between ? last.round : s.round;
   // After a handoff the last visit's darts stay just long enough to be pulled.
   const onBoard = leaving ? last.hits : visit;
+  // Darts on the board are their thrower's colour; the dart in hand, the next one's.
+  flightColour(seat(leaving ? last.player : shown) + 1);
   const note = noteOf(last, s),
     look = view();
   let card = "",
@@ -958,6 +975,7 @@ function play(impactClass = "", leaving = false) {
     return;
   }
   render("oche", world, "", keep);
+  flightColour(seat(shown) + 1);
   // A landing keeps the throw control: bring the next dart in as a new one would.
   if (keep)
     for (const a of $("#throw").getAnimations()) {
@@ -1169,6 +1187,7 @@ function finish(impactClass = "") {
     table = `${head}<tbody>${row("Darts", "darts")}${row("3-dart average", "average")}${row("Best visit", "top")}</tbody>`;
   }
   const said = look && impactClass ? look.callout(last, end.gains.at(-1), end, s, end.player) : null;
+  flightColour(seat(end.player) + 1);
   const keep = landing(visit, impactClass, note, null, said);
   const world = `<div class="field">${plate(s, end.player, end.round, visit, true, end.bust)}
        <div class="board-wrap">${keep ? "" : board(visit, impactClass) + (impactClass ? callout(last, note, said) : "")}</div></div>`;
@@ -1207,9 +1226,40 @@ document.addEventListener("visibilitychange", () => {
 // the event, so look again then. A change re-measures the resting dart.
 function refit() {
   if (fitScreen()) cancelAim();
-  requestAnimationFrame(() => fitScreen() && cancelAim());
+  light();
+  requestAnimationFrame(() => {
+    if (fitScreen()) cancelAim();
+    light();
+  });
+}
+// The room's light (src/light.js), baked for this board size and screen density,
+// and again only when either changes (rotation, zoom). Without WebGL, or with
+// ?flat, the room keeps its CSS lamp and SVG face.
+let baked = "";
+function light() {
+  if (/[?&]flat\b/.test(location.search)) return;
+  const probe = document.createElement("i");
+  probe.style.cssText = "position:absolute;width:var(--b)";
+  scene.append(probe);
+  const b = probe.getBoundingClientRect().width;
+  probe.remove();
+  const size = b + "@" + devicePixelRatio;
+  if (!(b > 0) || size === baked) return;
+  baked = size;
+  try {
+    performance.mark("light");
+    bake({ b, dpr: devicePixelRatio, sectors, face: $(".room-face"), wall: $(".room-wall"), floor: $(".room-floor") });
+    performance.measure("light", "light");
+    if (!scene.classList.contains("lit")) {
+      scene.classList.add("lit");
+      litFace(true);
+    }
+  } catch {
+    /* The CSS and SVG room stays, or the last bake, stretched. */
+  }
 }
 fitScreen();
+light();
 for (const type of ["resize", "orientationchange", "pageshow"])
   addEventListener(type, refit);
 document.addEventListener("visibilitychange", () => {

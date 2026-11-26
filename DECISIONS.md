@@ -1331,3 +1331,168 @@ Chromium only (Playwright 1.63), under `/Darts/`. This session had no WebKit, Ma
 - **Around the Clock and Shanghai.** Is the lit number obvious, and do the empty slots' hints make sense?
 - **Lengths.** If casual players often hit the 15- or 20-round limits, raise `rules.clock.rounds` or `rules.cricket.rounds` in `src/game.js`.
 - **VoiceOver** on one visit of each game.
+
+## Studio look · 25 November 2026
+
+Players said Dartshift still feels like a 2D web page, despite the room. This section makes the whole game look three-dimensional and finished, without touching the rules, scoring, the throw or `tune`. It was written in two passes: the diagnosis and direction below were recorded after the baseline captures and the first static renders of the lit board, before the rest was built.
+
+### Why it reads as 2D
+
+Measured from the baseline captures (`review/before/`, Chromium, six sizes) and the code:
+
+- **Nothing shows where the light is.** The board face is evenly lit, apart from one faint radial gradient baked into the SVG. The "lamp" is a radial-gradient decal on the wall; nothing it lights changes brightness with distance or angle, and nothing casts a shadow from it. The only directional cue in the game is the dart's shadow (`tune.flight.shadowX/Y`: light from up and to the left), and nothing else agrees with it.
+- **Every surface is the same material.** Sisal, wires, numbers, the surround, the wall and the floor are all flat fills or gradients. Metal never catches a highlight, paint never differs from foam, and the wires are three offset strokes rather than round wire.
+- **Nothing touches anything.** No contact darkening where the board meets the surround, the surround meets the wall or the wall meets the floor. The board's shadow is a blurred ellipse painted under it, the surround is a disc with a soft halo, and the oche is a grey bar floating above the floor.
+- **No thickness.** The board has an 8 mm sliver of side and the surround none. The score plate, cards and buttons are rounded rectangles with a hairline top highlight and a drop shadow: elevation without depth.
+- **Darts read as icons.** Landed darts are 90 board mm long (`tune.flight.length`, fixed) and mostly seen end-on, so they are small. Their shadow is a flat 45% silhouette and the tip has no contact with the board.
+- **The interface is a web page laid over the scene.** It doesn't share the room's light. The game row scrolls and cuts off ("AROUND T…"); the mode buttons are list rows with chevrons; the primary button is flat; focus is a plain 3 px outline; sheets are plain cards.
+- **Motion has no mass.** The camera dollies, but cards and sheets cross-fade and slide like web overlays.
+
+What already works: the camera shots through one room, the floor's perspective, the neon sign, and the compositor-driven flight. Those stay.
+
+### Direction: one lamp, one room
+
+The same dark pub, lit by one warm spot that everything answers to, finished like hardware in that pub.
+
+- **One light, everywhere.** A warm spot hangs above and in front of the board, a little to the left: exactly where the dart shadows already say it is. It lights the board (brighter top left, falling off bottom right), puts a highlight on every wire's upper edge with a shadow line beside it, raises the numbers, puts a sheen on the surround's rounded edge and casts the board's and surround's shadows on the surround and wall. The wall is dark-painted timber boards with V-grooves that catch it; the pool of light falls off into the room's darkness. The floor gets the spill.
+- **Contact and thickness.** The board stands 40 mm off the wall with a visible side, inside a 24 mm foam surround with a rounded edge. Contact darkening where board, surround, wall, skirting and floor meet. A real oche: a raised steel strip on the floor.
+- **Interface as pub hardware.** Score displays become back-lit sign boxes hung on the wall: a thick dark case with a smoked face, digits that glow like the neon in the player's colour, lit by the same lamp and casting on the wall. Buttons become physical keys with a visible side that press down. The game row becomes five keys in one row, each with its own emblem: nothing scrolls or cuts off. Cards and sheets are the same slabs. Focus is an amber neon ring.
+- **Darts as objects.** Flights take the thrower's colour (orange for Player 1, blue for Player 2), the barrel gets a tungsten highlight, and a landed dart gets a contact mark at the tip and a shadow that softens with distance.
+- **Kept exactly:** the dark pub room, the neon game title, orange and blue for the players, and the type families (Anton for the neon, Barlow Condensed ExtraBold Italic for display, Barlow for text, the system monospace for labels). Nothing from the reverted "Tungsten Local" restyle comes back: no green wall, no brass, no mahogany, no new fonts.
+
+### Rendering: bake the light, move with CSS
+
+**Chosen.** A WebGL fragment shader computes the light once per pixel for three surfaces (board face, wall with surround, floor) at the screen's own resolution, copies each into a plain `<canvas>` on the room's existing CSS 3D planes, and releases the WebGL context (`src/light.js`, about 450 lines with the shaders, no library).
+- **The camera stays CSS.** Shots still animate `transform` on the same layers, on the compositor. Nothing re-renders during a move, a throw or a landing.
+- **The throw is untouched.** The SVG board keeps its `.board-plane` group with the same matrix, so `getScreenCTM()`, the flight's end point and the overlay are computed exactly as before. Lit, that group just stops drawing the face. The shader draws the face in the same projection, from the same radii and sector order as `scoreAt()`.
+- **The board is no longer repainted on screen changes.** The face lives in the room layer, so `render()` rebuilding the stage (lobby, play, results) never re-rasterises it. Before, every such rebuild repainted the SVG face.
+- **Fallback.** Without WebGL, if a shader fails to compile, or with `?flat`, the previous CSS lamp and SVG face are used unchanged. All three programs compile before any canvas is touched, so a failure can't leave half a room.
+- **Re-baked only when the board's size or the screen density changes** (rotation, zoom), never during play.
+
+**Rejected.**
+- **A WebGL room with a live camera (three.js or similar).** The earlier reasons hold: about 150 KB gzipped of engine, a second render path, text outside the accessibility tree, GPU memory on SE-class phones. Two new ones: a main-thread render loop would have to stay in step with the CSS camera and the compositor-driven flight, which it can't guarantee; and it would break "no idle loop".
+- **Pre-rendered images.** One per orientation, size and density to stay sharp, hundreds of KB each (the room already removed a 547 KB photograph), and they can't follow the tunables.
+- **SVG lighting filters** (`feDiffuseLighting`, `feSpecularLighting`) on the board. "Grab and flight" found that a filter on the board was the main cause of flight lag, because anything painting over it re-rendered it.
+- **Canvas 2D per pixel.** The same maths on the CPU: about 1.3 million pixels for a Pro Max face, far slower than the GPU on an SE-class phone.
+- **Keeping a live WebGL canvas** (`preserveDrawingBuffer`). iOS can drop WebGL contexts in the background, and a held context costs memory for nothing once the picture is drawn.
+- **Tilting or orbiting the camera** to show depth. The baked board and surround are lit for one viewpoint, and the play shot must stay square-on for the throw. The camera keeps its straight dollies.
+
+### Benchmarks
+
+Looked at in this session: the App Store pages of **GamePigeon** (Darts is one of its iMessage games), **Darts Club** (BoomBit), **Pro Darts 2026** (iWare Designs) and the **Darts of Fury** site (Yakuto), plus iOS Hacker's "Best Darts Games For iPhone And iPad" (February 2024). This session couldn't play them or view their screenshots, so what follows on their in-game look combines their own descriptions with general knowledge of the genre, and should be checked against the games themselves.
+
+- **Pro Darts 2026:** "fully textured 3D game environments", "3 levels of Oche (throw line) camera", and a UI that "animates when you interact with it" and reacts "when you release a button". Taken: buttons that answer the finger.
+- **Darts of Fury:** an "epic darts arena" with "atmospheric big screen action". Taken: a dark surround so the lit board is the only thing that matters. Not taken: arenas and big screens; Dartshift is a pub.
+- **Darts Club:** "multiple detailed venues" and dart parts that give darts "a unique look". Taken: darts that look owned (the player's colour on the flights). Not taken: cosmetic shops and unlocks, still out of scope.
+- **GamePigeon Darts:** one board filling the frame, a flick from the bottom, and almost no chrome during play. Taken: during play, only the board, the dart and one compact scoreboard.
+
+### What was built
+
+**The light** (`src/light.js`, tuned in `style.css` "Light and materials"):
+- **The spot** sits at (−0.38, −0.55, 1.6) board widths from the bull: the direction the dart shadows already use (about −0.25 : −0.36 : 1 against `tune.flight.shadowX/Y`'s −0.24 : −0.34 : 1). A 21° beam with a 10° soft edge, 5% spill outside it, 20% ambient, warm tungsten.
+- **Exposure is pinned to the board.** The key is normalised so the face at the bull shows exactly its own colours. Everything else is relative to that, so the beds keep the colours players learned. Measured on the baked face, the cream beds 135 mm out are 3% brighter at the top left and 11% darker at the bottom right than near the bull (displayed luminance), from distance and angle alone: enough to see the light's direction, not enough to cost a bed its colour.
+- **The face** (full device resolution, up to 2048 px): beds in the SVG's colours with sisal fibre (three noise scales and a fibre streak, which bends the surface normal as well as the colour); round wires of 0.7 mm radius with a highlight along the lit side, a shadow line on the far side and contact darkening; numbers raised 2.6 mm, bevel-lit, casting a short shadow on the number ring; a rounded rim; the board's side below the face.
+- **The wall** (0.6 texels per CSS px, at most 1.6 megapixels; see the budgets below for why not 1): the surround as a 24 mm foam ring with a 16 mm rounded edge, the board 40 mm proud of the wall, both casting soft shadows (penumbra widening with height) on the surround and wall; contact darkening at every join; painted timber boards 0.3 board widths wide with V-grooves lit on one side; a chamfered skirting. Its edges fade into the room's darkness.
+- **The floor** (0.45 texels per CSS px: it is seen at a glancing angle, where detail would only shimmer): varnished planks with staggered joints, the throw mat with its green edge lines, the oche as a raised steel strip with a lit top and a shadow toward the player, and darkening along the wall.
+- **Dither** of 2 levels on every surface, against banding in the dark gradients.
+- **The neon** gets its own soft orange spill on the wall, which flickers on with the tubes.
+
+**The interface** (`style.css`, "Hardware"):
+- **Sign boxes:** the scoreboard, cards, sheets and notices share one case: a bevelled frame lit from the top left (a border-box gradient), a smoked face with a reflection band, a lit top edge, a 4 px thickness, and a shadow. The scoreboard's shadow falls on the wall at `--shade`, like everything else hung there; cards, sheets and notices float in front of the room and cast down.
+- **Back-lit digits:** the scoreboard's number glows in the thrower's colour, like the neon. Dart slots are wells sunk into the face; a thrown dart's score lights up in its well; the next slot is ringed in the thrower's colour.
+- **Keys:** every button has a face lit from above, a visible side (`--depth`, 4–6 px) and a press that takes the side away (70 ms, `translate` and `box-shadow` only). iOS shows `:active` once the page listens for touches, so one passive `touchstart` listener was added. Keys click when pressed (a 12 ms tick and a soft knock, synthesised; muted with the rest).
+- **The game keys** replace the scrolling row: five keys in a recessed tray, each with its own emblem (speed, a count down to zero, a closed cricket mark, a clock, single-double-treble) and a short label. The chosen key stays down and lit from inside. The neon above shows the full name. Each key's accessible name is the full name, which contains its visible label. Nothing scrolls or cuts off at 320 px.
+- **Mode keys** are the players' colours, orange for solo and blue for a duel, with dark ink and no list arrows. The key face is lightest where the text sits. Measured contrast where text sits: 6.5–8.0:1 on orange (the subline 6.7–7.0:1) and 8.4–10:1 on blue. The old subline, grey on a dark panel, was about 8:1, so the orange key's subline is a little lower than before while staying well above the 4.5:1 minimum; it matches the primary button, which was already dark on orange. If that matters more than the coloured keys, dark mode keys with an orange edge restore it. Primary keys take the colour of whoever is up next, as before; secondary keys are dark.
+- **Big numbers are solid:** the visit total, results score and callout have a five-step extrusion in their own colour (`color-mix` with `currentColor`) and a shadow.
+- **Cards swing up** into view on a bottom hinge (`--ui-swing`, 460 ms), with a strip of light along the top in the colour of whoever is up next. Reduced motion shows them in place.
+- **Focus** is an amber neon ring with a dark gap, drawn as its own layer so keys keep their sides. Forced-colours mode gets a plain 3 px outline.
+- **Step numbers** in How to play are small orange keycaps.
+
+**The darts** (`src/art.js`):
+- Flights take the thrower's colour: orange for Player 1, blue for Player 2. Darts already on the board keep their thrower's colour while they're pulled.
+- A tungsten barrel with a sharper highlight, a graphite shaft, neutral fin edges.
+- A landed dart has a dark contact mark at the tip, and its shadow (and the approach shadow in flight) fades from 66% at the tip to 14% at the tail, so it reads as falling on the board from a height.
+- **The outline is unchanged.** The barrel, shaft and fin paths keep their shapes, so the painted dart's box, and with it the grab target, is exactly as before.
+
+**What didn't change:** `src/throw.js`, `src/input.js`, `src/game.js`, `src/coach.js`, `src/viewport.js`, the worker template and the build. Every save key and shape. The camera shots and their tunables. The callout, impact ring, settle and flare timings.
+
+### Tuning by feel
+
+Everything to adjust by eye is in the "Scene tuning" block at the top of `style.css`, separate from the throw's `tune`. The light is baked at launch, so a change shows on the next launch or rotation. Try these first:
+- **Too dark or too bright overall:** `--light` (1 shows the beds' own colours at the bull), then `--ambient` for the shadows.
+- **The pool of light too tight or too wide:** `--spot-cone` and `--spot-soft` (degrees), and `--spot-spill` for how dark the room gets outside it.
+- **The light's direction:** `--light-x`, `--light-y`, `--light-z`. Move them together along the line the dart shadows assume, or the darts' shadows and the room will disagree.
+- **Warmer or cooler:** `--light-colour`. Tints are normalised, so colour never changes exposure.
+- **Shadows:** `--shadows` (strength) and `--shadow-soft` (how fast the penumbra grows).
+- **Materials:** `--wire-shine`, `--sisal`, `--number-relief`, `--sheen`; the wall's `--wall-paint` and `--wall-boards`.
+- **Banding in the dark on a particular screen:** raise `--grain`.
+- **Keys:** `--depth` and `--side` on each key in "Hardware"; the card swing is `--ui-swing`.
+- **To compare with the old room:** open the game with `?flat`.
+
+### Budgets and results
+
+Set before building, measured on the final build against main (9eff79e) in the same way "Grab and flight" measured: `scripts/check/flight.cjs`, Chromium 1.63 headless at 390×844 @2 unless stated, nine throws in the 215/120/380 ms stroke cycle, CPU slowed with CDP. Each configuration ran twice, interleaved with the baseline. All numbers in ms.
+
+| Budget | Target | Before | After |
+|---|---|---|---|
+| Download (precache, uncompressed) | under +40 KB, no new images, fonts or libraries | 622,251 B, 24 files | 653,818 B, 25 files (+31.6 KB, +5.1%) |
+| HTML, CSS and JS, gzipped together | | 52.7 KB | 64.4 KB (+11.6 KB; `src/light.js` is 8.1 KB of it) |
+| Flight frames (median / p95), every configuration | no worse | 16.7 / 16.7–16.8 | 16.7 / 16.7–16.8 |
+| Flight frames over 25 ms, all ten runs | no more | 3 of 1,481 | 5 of 1,551 (0–3 per run either way: noise at this level) |
+| Release to first frame (median) | no worse | 10.1–17.4 | 10.0–15.4 |
+| Contact frame (median) | no worse | 16.7–16.8 | 16.7 |
+| Worst of the three frames after contact (median) | no worse | 16.7–16.8 | 16.7 at 4×, SE, Pro Max @3 and Cricket; **33.3 at 6×** (both runs) |
+| Running animations at rest | none | none | none (lobby, play, handoff, help; with and without reduced motion) |
+| Board repaints at release or contact | none | none (board layer) | none: the face is a canvas with its own layer that nothing touches after the bake |
+| Largest tip error (390×844, 320×568, 852×393) | unchanged | 0.000015, 0.000014, 0.000012 px | 0.000011, 0.000021, 0.000012 px |
+| Bake, once per launch or rotation | under 150 ms on an SE-class iPhone | – | not measurable here (see below) |
+
+Per configuration (median / p95 of flight frames, frames over 25 ms, and the worst frame after contact; run 1 · run 2):
+
+| Configuration | Before | After |
+|---|---|---|
+| 4× slowdown | 16.7/16.8, 1, 16.7 · 16.7/16.8, 0, 16.7 | 16.7/16.7, 0, 16.7 · 16.7/16.8, 0, 16.7 |
+| 6× slowdown | 16.7/16.8, 2, 16.8 · 16.7/16.8, 0, 16.8 | 16.7/16.8, 0, 33.3 · 16.7/16.8, 3, 33.4 |
+| SE (375×667) at 4× | 16.7/16.7, 0, 16.7 · 16.7/16.8, 0, 16.7 | 16.7/16.8, 1, 16.7 · 16.7/16.8, 1, 16.7 |
+| Pro Max (430×932 @3) at 4× | 16.7/16.7, 0, 16.7 · 16.7/16.7, 0, 16.7 | 16.7/16.8, 0, 16.7 · 16.7/16.7, 0, 16.7 |
+| Cricket (its overlay changes most darts) at 4× | 16.7/16.7, 0, 16.7 · 16.7/16.8, 0, 16.7 | 16.7/16.7, 0, 16.7 · 16.7/16.7, 0, 16.7 |
+
+**What the 6× difference is, and isn't.** Only the heaviest frame after contact, at the heaviest slowdown, is a frame longer in the median. It was found and narrowed by ablation, as in "Grab and flight":
+- **Not the interface.** Removing every new box shadow, the scoreboard's glowing digits, or the callout (its extrusion, its glow, or the whole element) left it at 33 ms.
+- **The static canvases.** Hiding any one of the three baked canvases brought it back to 16.7 ms. Nothing changes them after the bake, so the cost is in compositing their pixels, which this headless Chromium does on the CPU (SwiftShader); an iPhone composites on the GPU.
+- **At first the wall was baked at one texel per CSS px and the floor at 0.75.** That also put 3–11 of about 155 flight frames over 25 ms at 6×. Giving the canvases their own layers didn't help; lowering the wall to 0.6 and the floor to 0.45 removed the flight-frame effect, with no difference visible at 3× (the wall and surround are soft by nature). The after-contact frame at 6× is what remains.
+- **Whether it exists on an iPhone is unknown.** It needs Safari's timeline on a phone (below).
+
+**The bake.** In this environment WebGL runs in software, on the server's CPU, so a bake took 0.9–1.3 s at the first resolution and 0.68–0.91 s at the final one (375×667 @2 to 430×932 @3), almost all of it shading pixels; compiling the three shaders took 2–15 ms. That says nothing useful about an iPhone's GPU, where the same work is expected to take tens of milliseconds, but it hasn't been measured. The five-tap readout now shows the bake time on the device.
+
+### Verification · 25–26 November 2026
+
+Chromium only: Playwright 1.63's Chromium on Linux, with software WebGL. WebKit isn't installed in this environment and its instructions are not to install Playwright browsers, and no Mac or iPhone was attached, so nothing here comes from real WebKit, the iOS simulator or a phone. The previous sections noted that headless WebKit on Linux doesn't composite 3D transforms in screenshots anyway, so their reviewed after-shots also came from Chromium.
+
+- **Automated.** All 75 Node tests pass. Two are new in `tests/light.test.js`: every light and material setting the bake reads is defined in `style.css` as a number or colour (checked to fail when one is blanked), and the bake takes the board's projection from the throw's `tune`.
+- **The baked face against the scoring** (`scripts/check/face.cjs`). 1,500 random points per run, each at least 1.6 mm from any wire, read from the baked face through the throw's projection, at 393×852, 375×667 and 852×393, at device scales 2 and 3: every one is the colour family of the bed `scoreAt()` gives there. A copy with the shader's sectors turned by 2° fails it (104 of 1,500 wrong). The same check confirms `?flat` keeps the SVG face.
+- **The guard.** A copy whose face shader draws nothing stays on the CSS and SVG room (`flat`) instead of showing a blank board.
+- **Tip alignment and the flick** (`scripts/check/flick.cjs`) at 390×844, 320×568 and 852×393, before and after: saved hits equal the model replayed on the page's own touch samples, and the flying tip ends on the scored point (largest errors in the table above).
+- **The finishing highlight** (`scripts/check/finish.cjs`) at its nine sizes, and the old double-out save: pass.
+- **Complete matches** (`scripts/check/match.cjs`, under `/Darts/`, clean consoles, results equal to the saved hits, overlays equal to `boardTargets()` before every dart):
+  - on the release candidate: Nine Dart Rush touch solo (393×852), keyboard duel with reduced motion (375×667), touch duel (852×393) and mouse solo (932×430); 301 keyboard solo (390×844) and touch duel with reduced motion (667×375); Cricket touch solo with reduced motion (320×568) and keyboard duel (390×844); Around the Clock keyboard solo with reduced motion (390×844) and touch duel to the round limit (393×852); Shanghai touch solo (375×667) and keyboard duel with reduced motion (320×568);
+  - on the final build: Nine Dart Rush touch solo (393×852), Cricket keyboard duel with reduced motion (375×667), 301 touch duel (852×393), Shanghai keyboard solo (430×932) and Around the Clock touch solo with reduced motion (320×568).
+- **Updates, offline and rollback** (`scripts/check/modes-update.cjs`, real service worker), on the final build:
+  - from 16501cc, the release the check was written for: Update game resumed a 301 card with every save unchanged and showed "Updated · A new look…"; a second update resumed a Cricket card; with the server stopped, a reload launched from cache, resumed and saved a dart; rolled back, that release kept its own saves and left `dartshift.games.v1` alone; forward again, the Cricket solo was still there;
+  - from main (9eff79e): the same update, second update and offline launch pass. The check's rollback step asserts what 16501cc shows (Nine Dart Rush only), so it doesn't apply to main, which shows Cricket and five games, as it should.
+  - The check now takes the expected release note from `NOTE`.
+- **The stale-tab guard** (`scripts/check/tabs.cjs`) passes on main and on this build, with and without storage events. The check itself had been failing at setup on main: it still read 301 matches from `dartshift.301.v1`, which only holds old double-out matches since "First to zero". It now reads `dartshift.301.v2` first.
+- **The installed-app viewport** (`scripts/check/viewport.cjs`, the iOS 26+ short-viewport model at 393×852): the room, panel and throw control reach 852, and nine throws land on their points.
+- **Screens and moments.** `review/` holds before-and-after screenshots of every screen and moment at the iPhone SE, 393×852 and Pro Max sizes in portrait and landscape (22 each), reduced-motion screens, and before-and-after recordings of a throw and a screen transition. `review/index.html` shows them side by side. They are WebP at 1.5×; `scripts/check/shots.cjs` recaptures them. Fixed after looking at them: the update notice wrapped into a narrow column; the landscape game tray covered the neon's second line; the orange keys' small text was below the old contrast.
+
+### What to check on the iPhone first
+
+Nothing in this section was seen on a real iPhone or the iOS simulator. These, in order:
+1. **That the room is lit at all.** Open the game: the wall should show timber boards in a pool of warm light, and the board a highlight on its wires. If it looks like the old flat room, the bake failed or was refused: open **How to play**, tap the title five times, and read the `light` line of the readout (`lit` or `flat`).
+2. **How long the bake takes.** The same `light` line gives the bake time and the face's size in pixels. Under about 60 ms on a recent iPhone and 150 ms on an SE is fine; it happens once per launch and rotation, before the first frame. Here, with software WebGL on a server CPU, it took 0.7–0.9 s, which says nothing about a phone's GPU.
+3. **The board's readability in daylight and at arm's length, on an SE.** Numbers, wires and beds; the 301 highlight; Cricket's badges. The bottom right of the face is about 11% darker than the middle by design.
+4. **Banding in the dark parts of the wall and floor,** on an OLED phone at low brightness. Raise `--grain` if the light pool shows rings.
+5. **Throw feel and frames.** It should feel identical: nothing about the throw changed, and the face no longer sits in the layer that repaints at a landing. A Safari Web Inspector timeline of a few throws should show no repaint of the board.
+6. **The keys under a thumb.** That each press visibly goes down and clicks (with sound on), that the selected game key reads as chosen, and that the orange keys' small text is comfortable to read.
+7. **Rotation:** turn the phone during a visit. The room re-bakes for the new board size; it should not flash.
+8. **Memory on an SE-class phone:** the face replaces the SVG board's own layer at the same size; the wall adds about 0.4–0.5 megapixels and the floor about 0.1. Watch for the app being reloaded after a return from the background.

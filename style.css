@@ -46,6 +46,31 @@
   --lamp-y: -0.62;
   --vignette: 0.75; /* 0–1 · lens darkening at the edges */
   --shade: 4px 9px; /* drop-shadow offset for things on the wall */
+  /* Light and materials. src/light.js bakes these once into the board face,
+     wall, surround and floor (WebGL, then plain canvases). Without WebGL the
+     CSS lamp above and the SVG face are used instead. Positions in b from the
+     bull; +y is down, +z out from the wall. */
+  --light-x: -0.38; /* the spot: above and in front of the board, a little left. */
+  --light-y: -0.55; /* Keep it on the line the dart shadows assume (src/throw.js */
+  --light-z: 1.6; /* tune.flight.shadowX/Y: about -0.24 : -0.34 : 1). */
+  --light-aim-x: 0; /* where the spot points, on the wall */
+  --light-aim-y: -0.08;
+  --light: 1; /* key strength. 1 shows the board's own colours at the bull */
+  --ambient: 0.2; /* 0–1 · fill light in the shadows */
+  --light-colour: #ffecd2; /* warm tungsten */
+  --ambient-colour: #c4cbbb;
+  --spot-cone: 21; /* degrees · half-angle of the beam */
+  --spot-soft: 10; /* degrees · its soft edge */
+  --spot-spill: 0.05; /* 0–1 · light outside the beam */
+  --shadows: 1; /* 0–1 · strength of every cast shadow */
+  --shadow-soft: 0.2; /* penumbra growth per mm of height */
+  --wire-shine: 1; /* 0–2 · specular on the wires */
+  --sisal: 0.8; /* 0–1 · fibre texture on the beds */
+  --number-relief: 1.6; /* how raised the numbers look */
+  --sheen: 0.06; /* 0–0.2 · gloss on paint, foam and varnish */
+  --grain: 2; /* levels of dither, against banding in the dark */
+  --wall-paint: #3b3d33; /* timber boards' paint, before the light */
+  --wall-boards: 0.3; /* b · board width */
   /* Timing */
   --cam-in: 560ms; /* dolly in to the oche */
   --cam-out: 480ms; /* step back between visits or to the lobby */
@@ -53,6 +78,7 @@
   --cam-ease: cubic-bezier(0.55, 0, 0.15, 1);
   --hold: 420ms; /* stay on the last dart of a visit before stepping back (read by src/app.js) */
   --ui-in: 280ms;
+  --ui-swing: 460ms; /* cards swinging up into view */
   --ui-out: 160ms;
   --callout: 1150ms; /* score pop on the board */
 }
@@ -172,9 +198,27 @@ button {
   cursor: pointer;
   touch-action: manipulation;
 }
+/* Focus: an amber neon ring with a dark gap, like the sign's tubes. Drawn on
+   its own layer so a key keeps its side and shadow; forced colours get an outline. */
 button:focus-visible {
-  outline: 3px solid #ffc36a;
-  outline-offset: 3px;
+  outline: 2px solid transparent;
+}
+button:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: calc(var(--r, 12px) + 6px);
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px #0b0c0a,
+    0 0 0 2px #ffcf8a,
+    0 0 0 4px #ff8a3d4d,
+    0 0 16px 2px #ff8a3d99;
+}
+@media (forced-colors: active) {
+  button:focus-visible {
+    outline: 3px solid CanvasText;
+  }
 }
 .icon {
   width: 22px;
@@ -257,6 +301,40 @@ p {
 .wallfx > * {
   position: absolute;
 }
+/* The baked room (src/light.js). Each canvas covers the box its shader drew. */
+.scene:not(.lit) canvas,
+.lit :is(.panels, .lamp, .surround, .skirting, .mat, .oche) {
+  display: none;
+}
+.room-wall {
+  left: calc(var(--cx) - var(--b) * 1.8);
+  top: calc(var(--cy) - var(--b) * 2);
+  width: calc(var(--b) * 3.6);
+  height: calc(var(--b) * (2 + var(--floor-drop)));
+}
+/* Its own layer, as the SVG board had: a dart, shadow or callout over it never
+   repaints it ("Grab and flight"). */
+.room-face {
+  will-change: transform;
+  left: calc(var(--cx) - var(--b) / 2);
+  top: calc(var(--cy) - var(--b) / 2);
+  width: var(--b);
+  height: var(--b);
+}
+.lit :is(.room-wall, .room-face, .room-floor) {
+  animation: lamp-on 900ms ease-out both;
+}
+.room-floor {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.lit .floor {
+  background: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
 .lamp,
 .flare {
   left: calc(var(--cx) + var(--b) * (var(--lamp-x) - 1.5));
@@ -332,8 +410,17 @@ p {
   transform: skew(-9deg);
   transition: opacity 0.3s;
 }
-.neon > * {
+.neon > *,
+.neon::before {
   animation: neon-on 1.1s steps(1) both;
+}
+/* The sign's light on the wall behind it. */
+.neon::before {
+  content: "";
+  position: absolute;
+  inset: -45% -20% -55%;
+  z-index: -1;
+  background: radial-gradient(closest-side, #ff57322b, #ff57320f 55%, #ff573200);
 }
 /* The sign belongs to the wide shots; up at the oche it is out of frame. */
 .scene:is([data-shot="oche"], [data-shot="step"]) .neon {
@@ -417,7 +504,8 @@ p {
 .scene.moment-ton .flare {
   animation: flare 1100ms ease-out;
 }
-.scene.moment-win .neon > * {
+.scene.moment-win .neon > *,
+.scene.moment-win .neon::before {
   animation: neon-on 1.1s steps(1) both;
 }
 @keyframes lamp-on {
@@ -483,6 +571,14 @@ p {
   translate: var(--shade);
   border-radius: 50%;
   background: radial-gradient(closest-side, #060808bd calc(100% - 8px), #06080800);
+}
+/* Lit, the face and its shadow are part of the room (src/light.js); the SVG
+   keeps only the face's geometry for the throw, the overlay and the darts. */
+.lit .board-wrap::before {
+  display: none;
+}
+.lit .board {
+  will-change: auto;
 }
 /* Its own layer: painted once, never repainted by a dart, shadow or callout. */
 .board {
@@ -600,6 +696,30 @@ p {
   overflow: visible;
   pointer-events: none;
 }
+/* ── Hardware. Everything you read or press is made like the pub's own and lit
+   by the room's lamp, up and to the left. Sign boxes (the scoreboard, cards,
+   sheets, notices): a bevelled case, a smoked face, a lit top edge and a shadow.
+   Keys (every button): a face, a side you can see, and a press that takes the
+   side away. */
+.plate,
+.card,
+dialog,
+.toast {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(#ffffff0c, #ffffff00 36%) padding-box,
+    linear-gradient(165deg, #1d1f1a, #0c0d0b 72%) padding-box,
+    linear-gradient(160deg, #5d5f55, #26281f 26%, #111210 60%, #2b2c26) border-box;
+  box-shadow:
+    inset 0 1px 0 #ffffff21,
+    inset 0 0 22px #00000073,
+    0 4px 0 #050604,
+    var(--cast, var(--shade) 16px #000000c4);
+}
+/* Cards, sheets and notices float in front of the room, not on the wall. */
+:is(.card, dialog, .toast) {
+  --cast: 0 20px 44px #000000e0;
+}
 .plate {
   position: absolute;
   top: calc(var(--top) + 6px);
@@ -608,17 +728,12 @@ p {
   height: calc(var(--plate-h) - 4px);
   margin: 0 auto;
   max-width: 420px;
-  padding: 9px 14px 10px;
+  padding: 8px 13px 9px;
   display: grid;
   grid-template-columns: 1fr auto;
   align-content: space-between;
   column-gap: 10px;
-  border-radius: 12px;
-  background: linear-gradient(155deg, #23261f, #141612 45%, #0e100d);
-  box-shadow:
-    inset 0 1px 0 #ffffff1c,
-    inset 0 -2px 0 #0007,
-    var(--shade) 14px #000b;
+  border-radius: 14px;
   --accent: var(--hot);
 }
 .plate.p2 {
@@ -638,12 +753,19 @@ p {
 }
 .plate .who {
   color: var(--accent);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
 }
+/* Digits lit from behind, in the thrower's colour, like the neon. */
 .plate-score {
   font: var(--race);
   font-size: 38px;
   line-height: 0.9;
   align-self: end;
+  color: #fff7ea;
+  text-shadow:
+    0 0 1px #fff8,
+    0 0 12px color-mix(in srgb, var(--accent) 70%, transparent),
+    0 0 28px color-mix(in srgb, var(--accent) 38%, transparent);
 }
 .visit {
   display: grid;
@@ -659,33 +781,38 @@ p {
   display: flex;
   gap: 5px;
 }
+/* Wells sunk into the face; a thrown dart's score lights up in its well. */
 .slot {
   display: grid;
   place-items: center;
   width: 30px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: 6px;
   font: var(--race);
   font-size: 16px;
   font-style: italic;
-  background: #ffffff0d;
-  box-shadow: inset 0 1px 2px #000a;
+  background: #040504;
+  box-shadow:
+    inset 0 2px 3px #000,
+    inset 0 -1px 0 #ffffff12,
+    0 1px 0 #ffffff14;
   color: #ffffff3d;
 }
 .slot.thrown {
-  background: #ffffff17;
-  color: var(--cream);
+  color: #fff7ea;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 .slot.next {
   box-shadow:
     inset 0 0 0 2px var(--accent),
-    0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
+    inset 0 0 9px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 /* 301: a suggested checkout in the darts still to throw, and a bust's darts struck out. */
 .slot.out {
   font-size: 13px;
   color: color-mix(in srgb, var(--accent) 70%, var(--cream));
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, #040504);
 }
 .slot.void {
   color: var(--muted);
@@ -700,36 +827,49 @@ p {
 .best-plate .plate-label {
   text-align: center;
 }
+/* Big numbers are solid: a face and a side, darker as it goes back, then a shadow. */
+:is(.visit-total, .result-score span, .callout b) {
+  text-shadow:
+    0 1px 0 color-mix(in srgb, currentColor 78%, #000),
+    0 2px 0 color-mix(in srgb, currentColor 62%, #000),
+    0 3px 0 color-mix(in srgb, currentColor 46%, #000),
+    0 4px 0 color-mix(in srgb, currentColor 30%, #000),
+    0 5px 0 color-mix(in srgb, currentColor 18%, #000),
+    0 10px 14px #000000c4;
+}
 .callout {
   position: absolute;
   display: grid;
   justify-items: center;
+  gap: 4px;
   pointer-events: none;
   transform: translate(-50%, -135%);
   font: var(--race);
   text-transform: uppercase;
-  text-shadow: 0 2px 6px #000;
   white-space: nowrap;
   animation: callout var(--callout) ease-out both;
 }
 .callout b {
-  font-size: 34px;
+  font-size: 36px;
   line-height: 0.9;
-  color: var(--cream);
+  color: #fff4e2;
 }
+/* A small sign under the number. */
 .callout span {
   font-size: 15px;
   color: var(--cream);
-  background: #0c0d0bd9;
-  padding: 1px 8px 2px;
-  border-radius: 6px;
+  padding: 2px 9px 3px;
+  border-radius: 7px;
+  background: linear-gradient(#262822, #0e0f0c);
+  box-shadow:
+    inset 0 1px 0 #ffffff26,
+    0 0 0 1px #000,
+    0 4px 8px #000000b3;
 }
 .callout.premium b {
-  font-size: 46px;
-  color: #ffc36a;
-  text-shadow:
-    0 0 14px #ff5732,
-    0 2px 6px #000;
+  font-size: 48px;
+  color: #ffd38a;
+  filter: drop-shadow(0 0 10px #ff5732b3);
 }
 .callout.bust b {
   color: var(--hot);
@@ -774,8 +914,8 @@ p {
 .throw-control:active {
   cursor: grabbing;
 }
-.throw-control:focus-visible {
-  outline-offset: -3px;
+.throw-control {
+  --r: 18px;
 }
 .dart-grip {
   display: block;
@@ -897,17 +1037,39 @@ p {
 .hud button {
   pointer-events: auto;
 }
+/* Keys. --depth is how far the side shows; --side its colour; --r the corner. */
+:is(.glass, .games button, .mode, .primary, .secondary, #apply, #install-ok) {
+  --depth: 5px;
+  --side: #050604;
+  position: relative;
+  border-radius: var(--r, 12px);
+  box-shadow:
+    inset 0 1px 0 #ffffff38,
+    inset 0 -2px 0 #00000038,
+    0 var(--depth) 0 var(--side),
+    0 calc(var(--depth) + 5px) 12px #000000b8;
+  transition:
+    translate 70ms ease-out,
+    box-shadow 70ms ease-out;
+}
+:is(.glass, .games button, .mode, .primary, .secondary, #apply, #install-ok):active,
+.games [aria-pressed="true"] {
+  translate: 0 calc(var(--depth) - 1px);
+  box-shadow:
+    inset 0 1px 0 #ffffff26,
+    inset 0 -1px 0 #00000038,
+    0 1px 0 var(--side),
+    0 3px 5px #000000b8;
+}
 .glass {
+  --r: 22px;
+  --depth: 4px;
   width: 44px;
   height: 44px;
   flex: none;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: linear-gradient(160deg, #2a2d27e6, #121411e6);
-  box-shadow:
-    inset 0 1px 0 #ffffff24,
-    0 4px 12px #000a;
+  background: radial-gradient(circle at 38% 28%, #3d4038, #1d1f1a 62%, #121310);
 }
 .glass .icon {
   width: 20px;
@@ -969,97 +1131,105 @@ p {
 }
 .tagline {
   text-align: center;
-  color: #deded2;
+  color: #e7e3d4;
   font-size: 15px;
   margin-bottom: 12px;
-  text-shadow: 0 1px 4px #000;
+  text-shadow:
+    0 1px 2px #000,
+    0 0 14px #000;
 }
-/* The game switch: one row that scrolls sideways (five games don't fit a phone's
-   width). The fade on the right edge says there are more. */
+/* The game keys: five in a tray, one row on every phone. The chosen one stays
+   down and lit from inside; its full name is on the neon sign. */
 .games {
-  display: flex;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  scroll-padding-inline: 4px;
-  scrollbar-width: none;
-  overscroll-behavior-x: contain;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), #0000);
-  mask-image: linear-gradient(to right, #000 calc(100% - 28px), #0000);
-  gap: 4px;
-  padding: 4px;
-  margin-bottom: 10px;
-  border-radius: 14px;
-  background: #0c0d0be6;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding: 6px 6px 11px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  background: linear-gradient(#030403, #0d0e0b);
   box-shadow:
-    inset 0 1px 2px #000a,
-    0 10px 24px #000b;
-}
-.games::-webkit-scrollbar {
-  display: none;
-}
-/* Room past the last game, so it scrolls clear of the fade (end padding on a
-   scroll container is ignored by some engines). */
-.games::after {
-  content: "";
-  flex: 0 0 24px;
+    inset 0 2px 6px #000,
+    0 1px 0 #ffffff17,
+    0 12px 26px #000000b3;
 }
 .games button {
-  flex: none;
-  scroll-snap-align: start;
-  padding-inline: 14px;
-  white-space: nowrap;
-  min-height: 44px;
-  border-radius: 10px;
-  font: var(--race);
-  font-size: 19px;
-  text-transform: uppercase;
+  --r: 10px;
+  min-width: 0;
+  min-height: 54px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
+  padding: 6px 2px 5px;
+  background: linear-gradient(#2d2f29, #191a16);
   color: var(--muted);
+  font: var(--race);
+  font-size: 13px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.games button span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+}
+.games .icon {
+  width: 22px;
+  height: 22px;
 }
 .games [aria-pressed="true"] {
   color: var(--cream);
-  background: linear-gradient(155deg, #343830, #1b1d18);
-  box-shadow:
-    inset 0 1px 0 #ffffff24,
-    inset 0 -3px 0 var(--hot);
+  background:
+    radial-gradient(110% 80% at 50% 100%, #ff57325c, #ff573200 72%),
+    linear-gradient(#23251f, #121310);
+}
+.games [aria-pressed="true"] .icon {
+  color: #ffb294;
+  filter: drop-shadow(0 0 4px #ff5732);
 }
 .modes {
   display: grid;
-  gap: 10px;
+  gap: 15px;
 }
+/* The mode keys are the players' colours: orange to play alone, blue for two. */
 .mode {
+  --r: 15px;
+  --depth: 6px;
+  --side: color-mix(in srgb, var(--accent) 42%, #000);
   display: flex;
   align-items: center;
   gap: 14px;
   width: 100%;
   text-align: left;
-  padding: 13px 16px;
-  min-height: 70px;
-  border-radius: 14px;
-  background: linear-gradient(155deg, #262922f2, #131512f2 60%);
-  box-shadow:
-    inset 0 1px 0 #ffffff1f,
-    inset 3px 0 0 var(--accent),
-    0 10px 24px #000b;
-  transition: scale 0.12s;
-}
-.mode:active {
-  scale: 0.98;
+  padding: 10px 16px;
+  min-height: 68px;
+  color: var(--key-ink);
+  background: linear-gradient(
+    color-mix(in srgb, var(--accent) 60%, #fff) 0%,
+    color-mix(in srgb, var(--accent) 86%, #fff) 45%,
+    var(--accent) 100%
+  );
 }
 .solo {
   --accent: var(--hot);
+  --key-ink: #120502;
 }
 .duel {
   --accent: var(--blue);
+  --key-ink: #06111b;
 }
 .mode-mark {
   width: 42px;
   height: 42px;
+  flex: none;
   display: grid;
   place-items: center;
-  background: var(--accent);
-  color: var(--ink);
-  border-radius: 10px;
-  box-shadow: inset 0 1px 0 #fff6;
+  border-radius: 50%;
+  background: #0000002b;
+  box-shadow:
+    inset 0 2px 4px #00000059,
+    0 1px 0 #ffffff59;
 }
 .mode-mark .icon {
   width: 23px;
@@ -1078,21 +1248,44 @@ p {
 }
 .mode small {
   display: block;
-  color: var(--muted);
   font-size: 14px;
   margin-top: 3px;
 }
 .card {
   padding: 18px 20px 20px;
-  border-radius: 18px;
-  background: linear-gradient(160deg, #262922f5, #121411f5 55%);
-  box-shadow:
-    inset 0 1px 0 #ffffff1f,
-    0 18px 44px #000c;
+  border-radius: 20px;
   --accent: var(--hot);
 }
 .card.p2 {
   --accent: var(--blue);
+}
+/* A strip of light along the top in the colour of whoever is up next. */
+.card::before {
+  content: "";
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: -2px;
+  height: 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 70%, #fff);
+  box-shadow:
+    0 0 8px var(--accent),
+    0 0 22px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+/* Cards swing up into view like a sign on a hinge. */
+#panel > .card:not(.ghost) {
+  transform-origin: 50% 100%;
+  animation: swing var(--ui-swing) cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+@keyframes swing {
+  from {
+    opacity: 0;
+    transform: perspective(700px) rotateX(-58deg) translateY(28px);
+  }
+  35% {
+    opacity: 1;
+  }
 }
 .handoff {
   text-align: center;
@@ -1100,17 +1293,17 @@ p {
 .handoff h2 {
   display: grid;
   justify-items: center;
-  margin: 2px 0 6px;
+  margin: 2px 0 8px;
 }
 .visit-total {
   font: var(--race);
   font-size: 64px;
   line-height: 1;
-  color: var(--cream);
+  color: #fff4e2;
 }
 .handoff.big .visit-total {
-  color: #ffc36a;
-  text-shadow: 0 0 22px #ff573299;
+  color: #ffd38a;
+  filter: drop-shadow(0 0 16px #ff573280);
 }
 .handoff.flat .visit-total {
   color: var(--muted);
@@ -1120,6 +1313,7 @@ p {
   font-size: 20px;
   text-transform: uppercase;
   color: var(--hot);
+  text-shadow: 0 0 10px #ff573266;
   min-height: 0;
 }
 .caller:empty {
@@ -1131,7 +1325,7 @@ p {
   gap: 18px;
   font-size: 15px;
   color: var(--muted);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .standings .p1 {
   color: color-mix(in srgb, var(--hot) 75%, var(--cream));
@@ -1148,34 +1342,36 @@ p {
   font: var(--race);
   text-transform: uppercase;
   font-size: 21px;
-  min-height: 50px;
-  border-radius: 12px;
+  min-height: 52px;
   padding: 10px 22px;
 }
 .primary {
-  background: linear-gradient(#ff6a48, var(--hot) 55%, #e84a28);
-  color: #161713;
-  box-shadow:
-    inset 0 1px 0 #fff6,
-    0 6px 16px #ff57323d;
+  --r: 14px;
+  --depth: 6px;
+  --side: color-mix(in srgb, var(--accent, var(--hot)) 42%, #000);
+  color: #120502;
+  background: linear-gradient(
+    color-mix(in srgb, var(--accent, var(--hot)) 60%, #fff) 0%,
+    color-mix(in srgb, var(--accent, var(--hot)) 86%, #fff) 45%,
+    var(--accent, var(--hot)) 100%
+  );
+}
+.p2 .primary {
+  color: #06111b;
 }
 .card .primary {
   width: 100%;
-  background: linear-gradient(
-    color-mix(in srgb, var(--accent) 80%, #fff),
-    var(--accent) 55%
-  );
 }
 .secondary {
-  background: #2a2c27;
-  box-shadow: inset 0 1px 0 #ffffff1a;
+  --r: 14px;
+  background: linear-gradient(#34362f, #1d1e1a);
 }
 .full {
   width: 100%;
 }
 .stack {
   display: grid;
-  gap: 10px;
+  gap: 15px;
 }
 .results h1 {
   font: var(--race);
@@ -1190,7 +1386,7 @@ p {
   gap: 8px;
   font: var(--race);
   font-size: 54px;
-  line-height: 1.05;
+  line-height: 1.1;
   color: var(--hot);
 }
 .result-score .p2 {
@@ -1213,18 +1409,30 @@ p {
   font: var(--race);
   font-size: 20px;
   text-transform: uppercase;
+  text-shadow: 0 0 12px #ff8a3d80;
 }
+/* The match in figures, on a recessed readout. */
 .results-table {
   width: 100%;
-  border-collapse: collapse;
-  margin: 10px 0 14px;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 10px 0 16px;
+  padding: 4px 12px;
   font-size: 15px;
+  border-radius: 10px;
+  background: #050604;
+  box-shadow:
+    inset 0 2px 5px #000,
+    0 1px 0 #ffffff14;
 }
 .results-table td,
 .results-table th {
-  border-bottom: 1px solid #ffffff14;
+  border-bottom: 1px solid #ffffff12;
   padding: 6px 0;
   text-align: right;
+}
+.results-table tr:last-child td {
+  border-bottom: 0;
 }
 .results-table th:first-child,
 .results-table td:first-child {
@@ -1238,7 +1446,7 @@ p {
 .actions {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 10px;
+  gap: 12px;
   white-space: nowrap;
 }
 .actions .primary {
@@ -1252,21 +1460,34 @@ p {
   transform: translateX(-50%);
   margin: 0;
   max-width: calc(100vw - 32px);
-  padding: 10px 16px;
-  border-radius: 12px;
+  width: max-content;
+  padding: 8px 10px 8px 16px;
+  border-radius: 14px;
   font-size: 14px;
-  background: #23251ff2;
-  box-shadow: 0 8px 22px #000b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .toast button {
-  text-decoration: underline;
+  white-space: nowrap;
   color: var(--cream);
   min-height: 44px;
   min-width: 44px;
-  padding-inline: 8px;
+  padding-inline: 10px;
 }
 #later {
   color: var(--muted);
+  text-decoration: underline;
+}
+:is(#apply, #install-ok) {
+  --r: 10px;
+  --depth: 4px;
+  --side: #5c1d0b;
+  color: #1a0b05;
+  font: var(--race);
+  font-size: 16px;
+  text-transform: uppercase;
+  background: linear-gradient(#ff8f6f, var(--hot) 45%, #dd4524);
 }
 .toast.install {
   display: grid;
@@ -1281,7 +1502,7 @@ p {
 }
 /* The last throw's tip, carried onto the card that ended the visit. */
 .handoff .tip {
-  margin: 4px 0 10px;
+  margin: 4px 0 12px;
   color: #ffc36a;
   font-size: 15px;
 }
@@ -1298,13 +1519,10 @@ dialog {
   overflow: auto;
   padding: 20px calc(22px + var(--right)) calc(22px + var(--bottom))
     calc(22px + var(--left));
-  border: 0;
-  border-radius: 22px 22px 0 0;
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
   color: var(--cream);
-  background: linear-gradient(170deg, #262922, #131512 40%);
-  box-shadow:
-    inset 0 1px 0 #ffffff1f,
-    0 -10px 50px #000c;
+  --cast: 0 -12px 50px #000000d9;
 }
 dialog[open] {
   animation: rise var(--ui-in) ease-out;
@@ -1312,7 +1530,7 @@ dialog[open] {
 dialog::backdrop {
   /* Past any status-bar shortfall; ::backdrop can't read --vh on iOS 16. */
   bottom: -128px;
-  background: #050605a8;
+  background: #050605b8;
 }
 .sheet-head {
   display: flex;
@@ -1334,17 +1552,29 @@ dialog::backdrop {
 }
 .steps li {
   counter-increment: step;
-  padding: 11px 0 11px 43px;
+  padding: 12px 0 12px 46px;
   position: relative;
   border-top: 1px solid #ffffff14;
 }
+/* The step numbers are small orange keycaps. */
 .steps li:before {
-  content: "0" counter(step);
+  content: counter(step);
   position: absolute;
   left: 0;
-  color: var(--hot);
+  top: 12px;
+  width: 32px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #1a0b05;
   font: var(--race);
-  font-size: 22px;
+  font-size: 19px;
+  background: linear-gradient(#ff8f6f, var(--hot) 45%, #dd4524);
+  box-shadow:
+    inset 0 1px 0 #ffffff66,
+    0 3px 0 #5c1d0b,
+    0 5px 8px #000000b3;
 }
 .steps strong,
 .steps small {
@@ -1458,6 +1688,20 @@ dialog::backdrop {
     min-height: 60px;
     padding-block: 8px;
   }
+  /* Shorter game keys, so the tray clears the sign above it. */
+  .games {
+    padding: 5px 5px 9px;
+    margin-bottom: 10px;
+  }
+  .games button {
+    min-height: 46px;
+    gap: 2px;
+    padding-block: 4px;
+  }
+  .games .icon {
+    width: 18px;
+    height: 18px;
+  }
   .card {
     padding: 12px 16px 14px;
   }
@@ -1482,7 +1726,7 @@ dialog::backdrop {
     left: calc(var(--cx) + var(--b) * 0.15);
     width: calc(var(--b) * 1.6);
     bottom: auto;
-    top: calc(var(--cy) - var(--b) * 0.5);
+    top: calc(var(--cy) - var(--b) * 0.6);
     font-size: calc(var(--b) * 0.13);
   }
   /* The results card takes the sign's spot. */
@@ -1491,18 +1735,8 @@ dialog::backdrop {
   }
 }
 @media (hover: hover) {
-  .primary:hover {
-    filter: brightness(1.08);
-  }
-  .secondary:hover,
-  .glass:hover {
-    filter: brightness(1.25);
-  }
-  .mode:hover {
-    box-shadow:
-      inset 0 1px 0 #ffffff1f,
-      inset 0 0 0 2px var(--accent),
-      0 10px 24px #000b;
+  :is(.glass, .games button, .mode, .primary, .secondary, #apply, #install-ok):hover {
+    filter: brightness(1.12);
   }
 }
 @media (prefers-reduced-motion: reduce) {

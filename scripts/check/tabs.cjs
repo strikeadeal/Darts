@@ -14,7 +14,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (m) => { throw new Error(m); };
 const stored = (p) => p.evaluate(() => ({
   rush: JSON.parse(localStorage.getItem("dartshift.flick.v1"))?.rush ?? null,
-  darts301: JSON.parse(localStorage.getItem("dartshift.301.v1"))?.match?.hits.length ?? null,
+  // A new 301 match is first to zero, saved in 301.v2 (DECISIONS.md "First to zero"); 301.v1 holds only old double-out ones.
+  darts301: (JSON.parse(localStorage.getItem("dartshift.301.v2")) ?? JSON.parse(localStorage.getItem("dartshift.301.v1")))?.match?.hits.length ?? null,
 }));
 const settled = (p) => p.waitForFunction(() => !document.querySelector(".field[aria-busy]") && !document.getAnimations().some((a) => a.playState === "running"), null, { timeout: 8000 });
 async function keyDarts(p, n) {

@@ -42,18 +42,20 @@
            untransformed board. -->
       <div id="scene" class="scene" data-shot="intro">
         <div class="cam wallfx" aria-hidden="true">
+          <canvas class="room-wall"></canvas>
           <div class="panels"></div>
           <div class="lamp"></div>
           <div class="flare"></div>
           <div class="surround"></div>
           <div class="skirting"></div>
+          <canvas class="room-face"></canvas>
           <div class="neon">
             <svg viewBox="0 0 38 28"><path d="M1 7 38 3l-3 7H10zm9 6h24l-3 6H18zm10 9h10l-3 5z" /></svg>
             <span>NINE DART</span><b>RUSH</b>
           </div>
         </div>
         <div class="cam floorfx" aria-hidden="true">
-          <div class="floor"><i class="mat"></i><i class="oche"></i></div>
+          <div class="floor"><canvas class="room-floor"></canvas><i class="mat"></i><i class="oche"></i></div>
         </div>
         <div class="vignette" aria-hidden="true"></div>
         <div class="cam" id="stage"></div>

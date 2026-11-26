@@ -16,6 +16,13 @@ const paths = {
   target:
     '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
   dart: '<path d="m2 22 12-12m0 0V5l5-4v5h4l-5 5z"/>',
+  // The game keys' emblems: speed, count down to zero, a closed cricket mark,
+  // the clock, and single, double and treble.
+  rush: '<path d="M3 20 19 4m0 0h-6m6 0v6M3 13l7-7m1 15 7-7"/>',
+  x01: '<path d="M13 3v11m-4.5-4.5L13 14l4.5-4.5M5 19.5h16"/>',
+  cricket: '<circle cx="13" cy="12" r="8.5"/><path d="m8.5 7.5 9 9m0-9-9 9"/>',
+  clock: '<circle cx="13" cy="12" r="8.5"/><path d="M13 7v5l3.5 2.5"/>',
+  shanghai: '<path d="M6 19h4M6 13.5h9M6 8h14"/>',
 };
 export const icon = (name) =>
   '<svg class="icon" aria-hidden="true" viewBox="0 0 26 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
@@ -62,13 +69,16 @@ const barrelGrooves = [21, 24, 28, 34, 37, 41]
 
 const dartDefinitions = `
   <linearGradient id="steel">
-    <stop stop-color="#546269"/><stop offset=".19" stop-color="#b6c6c9"/>
-    <stop offset=".34" stop-color="#fff"/><stop offset=".48" stop-color="#d3dcd9"/>
-    <stop offset=".71" stop-color="#768389"/><stop offset="1" stop-color="#374047"/>
+    <stop stop-color="#2f383d"/><stop offset=".16" stop-color="#8d9a9e"/>
+    <stop offset=".3" stop-color="#f4f8f6"/><stop offset=".42" stop-color="#b9c4c3"/>
+    <stop offset=".7" stop-color="#5b666b"/><stop offset="1" stop-color="#1e2427"/>
   </linearGradient>
   <linearGradient id="red-shaft">
-    <stop stop-color="#8a1021"/><stop offset=".28" stop-color="#ff6770"/>
-    <stop offset=".48" stop-color="#e43543"/><stop offset="1" stop-color="#700c1e"/>
+    <stop stop-color="#0e1012"/><stop offset=".26" stop-color="#7b8388"/>
+    <stop offset=".42" stop-color="#2f3539"/><stop offset="1" stop-color="#08090a"/>
+  </linearGradient>
+  <linearGradient id="shadow-fade" gradientUnits="userSpaceOnUse" x2="0" y2="125">
+    <stop stop-color="#050606" stop-opacity=".66"/><stop offset="1" stop-color="#050606" stop-opacity=".14"/>
   </linearGradient>
   <g id="dart-body">
     <path d="M0 0 2.1 19h-4.2Z" fill="url(#steel)"/>
@@ -77,8 +87,8 @@ const dartDefinitions = `
     <path d="M-3 46q3 1 6 0l1.2 33-3.6 25-4-25Z" fill="url(#red-shaft)"/>
   </g>
   <g id="dart-fin" transform="scale(.77 1)">
-    <path d="M0 76Q15 58 24 60Q30 61 30 68L26 94Q25 100 19 106L0 125Z" stroke="#771e2a" stroke-width=".6"/>
-    <path d="M0 76Q17 60 24 62L0 110Z" fill="#ff8a76" opacity=".42"/>
+    <path d="M0 76Q15 58 24 60Q30 61 30 68L26 94Q25 100 19 106L0 125Z" stroke="#000" stroke-opacity=".5" stroke-width=".6"/>
+    <path d="M0 76Q17 60 24 62L0 110Z" fill="#fff" opacity=".2"/>
   </g>`;
 
 // The tip is the origin. The shaft axis points towards the camera, with
@@ -106,6 +116,15 @@ function geometry({ ax, ay, roll }) {
   return { body, fins: fins.sort((a, b) => a.depth - b.depth) };
 }
 
+// Flights take the thrower's colour: orange for Player 1, blue for Player 2.
+// [hue, saturation, lightness offset] for hsl(); the light sets the rest.
+const flights = { 1: [11, 92, 0], 2: [204, 64, 12] };
+let flight = flights[1];
+export const flightColour = (player) => {
+  flight = flights[player] || flights[1];
+};
+const vane = (light) => `hsl(${flight[0]},${flight[1]}%,${light + flight[2]}%)`;
+
 function model(pose) {
   const { body, fins } = geometry(pose);
   return (
@@ -113,7 +132,7 @@ function model(pose) {
     fins
       .map(
         (fin) =>
-          `<use href="#dart-fin" transform="${fin.transform}" fill="hsl(352,76%,${fin.light}%)"/>`,
+          `<use href="#dart-fin" transform="${fin.transform}" fill="${vane(fin.light)}"/>`,
       )
       .join("")
   );
@@ -124,9 +143,9 @@ export function poseModel(group, pose) {
   const { body, fins } = geometry(pose);
   group.children[0].setAttribute("transform", body);
   fins.forEach((fin, i) => {
-    const vane = group.children[1 + i];
-    vane.setAttribute("transform", fin.transform);
-    vane.setAttribute("fill", `hsl(352,76%,${fin.light}%)`);
+    const use = group.children[1 + i];
+    use.setAttribute("transform", fin.transform);
+    use.setAttribute("fill", vane(fin.light));
   });
 }
 export const rest = {
@@ -142,7 +161,7 @@ function shadow(pose) {
   const ax = pose.ax + f.shadowX,
     ay = pose.ay + f.shadowY;
   const angle = (Math.atan2(-ax, ay) * 180) / Math.PI;
-  return `<path transform="scale(${factor}) rotate(${angle}) scale(1 ${Math.hypot(ax, ay)})" d="M0 0 3 18 4 45 2 74 18 62 19 92 1 125 -14 99 -17 65 -2 75 -3 45 -3 18Z" fill="#080909" opacity=".45"/>`;
+  return `<path transform="scale(${factor}) rotate(${angle}) scale(1 ${Math.hypot(ax, ay)})" d="M0 0 3 18 4 45 2 74 18 62 19 92 1 125 -14 99 -17 65 -2 75 -3 45 -3 18Z" fill="url(#shadow-fade)"/>`;
 }
 // Drawn about the impact point; the flight slides it in on its own small layer.
 export const approachShadow = (hit) => shadow(entryPose(hit));
@@ -192,13 +211,20 @@ function boardFace() {
   <g text-anchor="middle" fill="#f7f6ed">${numbers.join("")}</g>`;
 }
 const face = boardFace();
+// Lit, src/light.js has baked the face into the room. The SVG then keeps the face's
+// plane for its geometry (the throw reads .board-plane) and the dart definitions,
+// and draws nothing else.
+let faceArt = face;
+export const litFace = (on) => {
+  faceArt = on ? `<defs>${dartDefinitions}</defs>` : face;
+};
 
 export function landed(hit, effect = "") {
   const p = boardPosition(hit),
     pose = entryPose(hit);
   return `<g class="landed ${effect}" transform="translate(${p.x} ${p.y})">
       <circle class="impact-ring" r="13" fill="none" stroke-width="2"/>
-      ${shadow(pose)}
+      ${shadow(pose)}<ellipse rx="2.8" ry="2" fill="#030404" opacity=".55"/>
       <g class="embedded" style="--settle:${tune.flight.settleMs}ms;--flex:${tune.flight.flex}deg;--rebound:${-tune.flight.flex / 2}deg">
         <g transform="scale(${tune.flight.length / modelLength})">${model(pose)}</g>
       </g></g>`;
@@ -301,7 +327,7 @@ export function board(hits, impactClass = "", mark = null) {
     .map((hit, i) => landed(hit, i === hits.length - 1 ? impactClass : ""))
     .join("");
   return `<svg class="board" viewBox="-211 -211 422 422" role="img" aria-label="Dartboard, twenty at the top">
-    <g class="board-plane" transform="matrix(1 0 ${tune.camera.skew} ${tune.camera.faceHeight} 0 0)">${face}</g></svg>
+    <g class="board-plane" transform="matrix(1 0 ${tune.camera.skew} ${tune.camera.faceHeight} 0 0)">${faceArt}</g></svg>
     <svg class="finish" viewBox="-211 -211 422 422" aria-hidden="true" data-bed="${(mark?.key ?? "").replaceAll('"', "&quot;")}">${mark?.svg ?? ""}</svg>
     <svg class="approach" viewBox="-100 -100 200 200" aria-hidden="true"></svg>
     <svg class="board-objects" viewBox="-211 -211 422 422" aria-hidden="true">${darts}

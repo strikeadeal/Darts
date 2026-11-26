@@ -74,3 +74,9 @@ export function fanfare() {
     tone(hz, hz, 0.22 + i * 0.09, i === 3 ? 0.42 : 0.12, "triangle", 0.09),
   );
 }
+// A key going down: a short tick and a soft knock.
+export function click() {
+  if (!ready()) return;
+  tone(2400, 1200, 0, 0.012, "square", 0.018);
+  tone(180, 90, 0, 0.045, "triangle", 0.07);
+}
